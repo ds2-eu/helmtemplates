@@ -1,0 +1,63 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.app.name }}-ingress 
+  namespace: {{ .Release.Namespace }}
+{{- with .Values.ingress.annotations }}
+  annotations:
+    # use the shared ingress-nginx
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - {{ template "hostURL" . }}
+  rules:
+  - host: {{ template "hostURL" . }}
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.app.name }} 
+            port:
+              number: {{ .Values.configfile.ports.http }}
+      - path: /management
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.app.name }}
+            port:
+              number: {{ .Values.configfile.ports.management }}
+      - path: /protocol
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.app.name }}
+            port:
+              number: {{ .Values.configfile.ports.protocol }}
+      - path: /public
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.app.name }}
+            port:
+              number: {{ .Values.configfile.ports.public }}
+      - path: /control
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.app.name }}
+            port:
+              number: {{ .Values.configfile.ports.control }}
+      - path: /version
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.app.name }}
+            port:
+              number: {{ .Values.configfile.ports.version }}
+{{- end }}

@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.app.name }} 
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }}  
+    service: {{ .Values.app.name }} 
+spec:
+  ports:
+  - port: {{ .Values.configfile.ports.http }} 
+    name: http
+    targetPort: {{ .Values.configfile.ports.http }}
+  - port: {{ .Values.configfile.ports.management }}
+    name: management
+    targetPort: {{ .Values.configfile.ports.management }}
+  - port: {{ .Values.configfile.ports.protocol }}
+    name: protocol
+    targetPort: {{ .Values.configfile.ports.protocol }}
+  - port: {{ .Values.configfile.ports.public }}
+    name: public
+    targetPort: {{ .Values.configfile.ports.public }}
+  - port: {{ .Values.configfile.ports.control }}
+    name: control
+    targetPort: {{ .Values.configfile.ports.control }}
+  - port: {{ .Values.configfile.ports.version }}
+    name: version
+    targetPort: {{ .Values.configfile.ports.version }}
+  type: ClusterIP
+  selector:
+    app: {{ .Values.app.name }}
+

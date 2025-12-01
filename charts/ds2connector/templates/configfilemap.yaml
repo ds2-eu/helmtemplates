@@ -1,0 +1,26 @@
+{{- if .Values.app.configfile }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.app.name }}-configfilemap
+  namespace: {{ .Release.Namespace }}
+data:
+  configuration.properties: |
+    edc.participant.id: {{ .Values.app.name }}
+    edc.dsp.callback.address: {{ .Values.configfile.protocol }}://{{ template "hostURL" . }}/protocol
+    web.http.port: {{ .Values.configfile.ports.http }}
+    web.http.path: /api
+    web.http.management.port: {{ .Values.configfile.ports.management }}
+    web.http.management.path: /management
+    web.http.protocol.port: {{ .Values.configfile.ports.protocol }}
+    web.http.protocol.path: /protocol
+    edc.transfer.proxy.token.signer.privatekey.alias: private-key
+    edc.transfer.proxy.token.verifier.publickey.alias: public-key
+    web.http.public.port: {{ .Values.configfile.ports.public }}
+    web.http.public.path: /public
+    web.http.control.port: {{ .Values.configfile.ports.control }}
+    web.http.control.path: /control
+    web.http.version.port: {{ .Values.configfile.ports.version }}
+    web.http.version.path: /version
+    edc.dataplane.api.public.baseurl: {{ .Values.configfile.protocol }}://{{ template "hostURL" . }}/public
+{{- end }}
