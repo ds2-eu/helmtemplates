@@ -1,0 +1,175 @@
+# Default values for ds2connector.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+#### GLOBAL
+app:
+  name: ds2connectorv21
+  organisationId: idtb
+
+####  POSTGRES ####
+postgres:
+  app:
+    name: postgres
+    port: 5432
+    env: true
+    configfile: true
+
+  replicas: 1
+
+  image:
+    pullPoliy: Always
+    privateRegistry:
+      enabled: false
+
+  serviceAccount:
+    # Specifies whether a service account should be created
+    create: true
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name: ""
+  
+  config:
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: postgres
+
+#### VAULT ####
+vault:
+  app:
+    name: vault
+    port: 8200
+    env: true
+    configfile: false
+
+  replicas: 1
+
+  image:
+    pullPoliy: Always
+    privateRegistry:
+      enabled: false
+
+  serviceAccount:
+    # Specifies whether a service account should be created
+    create: true
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name: ""
+
+  config:
+    VAULT_DEV_ROOT_TOKEN_ID: root
+    VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+
+#### IDENTITY HUB ####
+ds2identityhub:
+  app:
+    name: ds2identityhub
+    port: 8080
+    env: true
+    configfile: false
+
+  replicas: 1
+
+  image:
+    name: ds2identityhub
+    tag: 0.0.2-beta
+    pullPoliy: Always
+    privateRegistry:
+      enabled: true
+
+  serviceAccount:
+    # Specifies whether a service account should be created
+    create: true
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name: ""
+
+  ingress:
+    enabled: true
+    annotations: {} 
+
+#### CONTROL PLANE ####
+ds2controlplane:
+  app:
+    name: ds2controlplane
+    port: 8080
+    env: true
+    configfile: true
+
+  replicas: 1
+
+  image:
+    name: ds2controlplane
+    tag: 0.0.2-beta
+    pullPoliy: Always
+    privateRegistry:
+      enabled: true
+
+  serviceAccount:
+    # Specifies whether a service account should be created
+    create: true
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name: ""
+
+  ingress:
+    enabled: true
+    annotations: {}
+
+### DATA PLANE ###
+ds2dataplane:
+  app:
+    name: ds2dataplane
+    port: 8080
+    env: true
+    configfile: false
+
+  replicas: 1
+
+  image:
+    name: ds2dataplane
+    tag: 0.0.2-beta
+    pullPoliy: Always
+    privateRegistry:
+      enabled: true
+
+  serviceAccount:
+    # Specifies whether a service account should be created
+    create: true
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name: ""
+
+  ingress:
+    enabled: true
+    annotations: {}
+
+  
+
+resourcesEnabled: false
+resources: 
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

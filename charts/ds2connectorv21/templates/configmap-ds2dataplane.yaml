@@ -1,0 +1,29 @@
+{{- if .Values.ds2dataplane.app.env }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.ds2dataplane.app.name }}-configmap
+  namespace: {{ .Release.Namespace }}
+data:
+  EDC_PARTICIPANT_ID: {{ template "ds2identityhubdid" . }}
+  EDC_TRANSFER_PROXY_TOKEN_VERIFIER_PUBLICKEY_ALIAS: {{ template "ds2identityhubdid" . }}#key-1
+  EDC_TRANSFER_PROXY_TOKEN_SIGNER_PRIVATEKEY_ALIAS: {{ template "ds2identityhubdid" . }}#key-1
+  EDC_DPF_SELECTOR_URL: http://{{ .Values.ds2controlplane.app.name }}:8083/api/control/v1/dataplanes
+  WEB_HTTP_PORT: "8080"
+  WEB_HTTP_PATH: /api
+  WEB_HTTP_CONTROL_PORT: "8083"
+  WEB_HTTP_CONTROL_PATH: /api/control
+  WEB_HTTP_PUBLIC_PORT: "11002"
+  WEB_HTTP_PUBLIC_PATH: /api/public
+  EDC_VAULT_HASHICORP_URL: http://{{ .Values.vault.app.name }}:{{ .Values.vault.app.port }}
+  EDC_VAULT_HASHICORP_TOKEN: root
+  EDC_DATASOURCE_DEFAULT_URL: jdbc:postgresql://{{ .Values.postgres.app.name }}:{{ .Values.postgres.app.port }}/{{ .Values.app.organisationId }}
+  EDC_DATASOURCE_DEFAULT_USER: ds2connector
+  EDC_DATASOURCE_DEFAULT_PASSWORD: ds2connector
+  EDC_SQL_SCHEMA_AUTOCREATE: "true"  
+  EDC_IAM_STS_OAUTH_TOKEN_URL: http://{{ .Values.ds2identityhub.app.name }}:7086/api/sts/token
+  EDC_IAM_STS_OAUTH_CLIENT_ID: {{ template "ds2identityhubdid" . }}
+  EDC_IAM_STS_OAUTH_CLIENT_SECRET_ALIAS: did:web:{{ template "ds2identityhubhostURL" . }}:{{ .Values.app.organisationId }}-sts-client-secret
+  EDC_HOSTNAME: ds2dataplane
+  EDC_DATAPLANE_API_PUBLIC_BASEURL: {{ template "ds2dataplanehostURL" . }}/api/public
+{{- end }}

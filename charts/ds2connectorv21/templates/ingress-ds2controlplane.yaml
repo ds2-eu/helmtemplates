@@ -1,0 +1,56 @@
+{{- if .Values.ds2controlplane.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.ds2controlplane.app.name }}-ingress 
+  namespace: {{ .Release.Namespace }}
+{{- with .Values.ds2controlplane.ingress.annotations }}
+  annotations:
+    # use the shared ingress-nginx
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - {{ template "ds2controlplanehostURL" . }}
+  rules:
+  - host: {{ template "ds2controlplanehostURL" . }}
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.ds2controlplane.app.name }} 
+            port:
+              number: {{ .Values.ds2controlplane.app.port }}
+      - path: /api/management
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.ds2controlplane.app.name }}
+            port:
+              number: 8081
+      - path: /api/dsp
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.ds2controlplane.app.name }} 
+            port:
+              number: 8082
+      - path: /api/control
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.ds2controlplane.app.name }}
+            port:
+              number: 8083
+      - path: /api/catalog
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.ds2controlplane.app.name }} 
+            port:
+              number: 8084
+{{- end }}
