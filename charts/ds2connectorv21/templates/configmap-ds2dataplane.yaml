@@ -25,5 +25,5 @@ data:
   EDC_IAM_STS_OAUTH_CLIENT_ID: {{ template "ds2identityhubdid" . }}
   EDC_IAM_STS_OAUTH_CLIENT_SECRET_ALIAS: did:web:{{ template "ds2identityhubhostURL" . }}:{{ .Values.app.organisationId }}-sts-client-secret
   EDC_HOSTNAME: ds2dataplane
-  EDC_DATAPLANE_API_PUBLIC_BASEURL: {{ template "ds2dataplanehostURL" . }}/api/public
+  EDC_DATAPLANE_API_PUBLIC_BASEURL: https://{{ template "ds2dataplanehostURL" . }}/api/public
 {{- end }}
