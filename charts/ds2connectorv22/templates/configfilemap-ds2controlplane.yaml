@@ -1,0 +1,12 @@
+{{- if .Values.ds2controlplane.app.configfile }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.ds2controlplane.app.name }}-configfilemap
+  namespace: {{ .Release.Namespace }}
+data:
+  participants.json: |
+    {
+      "{{ .Values.app.organisationId }}": "{{ template "ds2identityhubdid" . }}"
+    }
+{{- end }}

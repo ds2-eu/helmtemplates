@@ -1,0 +1,34 @@
+{{- if .Values.ds2identityhub.app.env }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.ds2identityhub.app.name }}-configmap
+  namespace: {{ .Release.Namespace }}
+data:
+  EDC_IH_IAM_ID: {{ template "ds2identityhubdid" . }}
+  EDC_IH_IAM_PUBLICKEY_ALIAS: {{ .Values.ds2identityhub.app.name }}-publickey
+  EDC_IH_API_SUPERUSER_KEY: "c3VwZXItdXNlcg==.c3VwZXItc2VjcmV0LWtleQo="
+  WEB_HTTP_PORT: "8080"
+  WEB_HTTP_PATH: /api
+  WEB_HTTP_IDENTITY_PORT: "7081"
+  WEB_HTTP_IDENTITY_PATH: /api/identity
+  WEB_HTTP_IDENTITY_AUTH_KEY: password
+  WEB_HTTP_CREDENTIALS_PORT: "7082"
+  WEB_HTTP_CREDENTIALS_PATH: /api/credentials
+  WEB_HTTP_DID_PORT: "7083"
+  WEB_HTTP_DID_PATH: /
+  WEB_HTTP_STS_PORT: "7086"
+  WEB_HTTP_STS_PATH: /api/sts
+  EDC_IAM_STS_PRIVATEKEY_ALIAS: key-1
+  EDC_IAM_STS_PUBLICKEY_ID: key-1
+  EDC_MVD_CREDENTIALS_PATH: /etc/credentials/
+  EDC_VAULT_HASHICORP_URL: "http://{{ .Values.vault.app.name }}:{{ .Values.vault.app.port }}"
+  EDC_VAULT_HASHICORP_TOKEN: root
+  EDC_DATASOURCE_DEFAULT_URL: jdbc:postgresql://{{ .Values.postgres.app.name }}:{{ .Values.postgres.app.port}}/{{ .Values.app.organisationId }}
+  EDC_DATASOURCE_DEFAULT_USER: ds2connector
+  EDC_DATASOURCE_DEFAULT_PASSWORD: ds2connector
+  EDC_SQL_SCHEMA_AUTOCREATE: "true"
+  EDC_IAM_ACCESSTOKEN_JTI_VALIDATION: "true"
+  EDC_HOSTNAME: ds2identityhub
+  EDC_IAM_DID_WEB_USE_HTTPS: "true"
+{{- end }}
