@@ -37,7 +37,7 @@ postgres:
 
   persistence:
     enabled: true
-    storage: 5 Gi
+    storage: 5Gi
     path: "/idt/postgres"
     accessmode: ReadWriteOnce
     mountpath: "/var/lib/postgresql/data"
