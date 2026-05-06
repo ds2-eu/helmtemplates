@@ -4,7 +4,7 @@
 
 #### GLOBAL
 app:
-  name: ds2connectorv21
+  name: ds2connectorv21pae
   organisationId: idtb
 
 ####  POSTGRES ####
