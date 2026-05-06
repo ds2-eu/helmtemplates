@@ -1,5 +1,5 @@
 apiVersion: v2
-name: ds2connectorv21
+name: ds2connectorv21pae
 description: A base Helm chart for Kubernetes IDT DS2 - Deployment + Service
 
 # This base chart has basic deployment and clusterip service + configuration: no ingress, no persistence
