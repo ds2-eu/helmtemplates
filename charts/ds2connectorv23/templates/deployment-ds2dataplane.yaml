@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.ds2dataplane.app.name }} 
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.ds2dataplane.app.name }} 
+spec:
+  replicas: {{ .Values.ds2dataplane.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.ds2dataplane.app.name }} 
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.ds2dataplane.app.name }} 
+    spec:
+{{- if .Values.ds2dataplane.serviceAccount.create }}
+      serviceAccountName: {{ .Values.ds2dataplane.app.name }}-serviceaccount
+{{- end }}
+      containers:
+      - name: {{ .Values.ds2dataplane.app.name }}
+        image: {{ template "ds2dataplaneimageURL" . }}
+        imagePullPolicy: {{ .Values.ds2dataplane.image.pullPolicy }} 
+        ports:
+        - name: http 
+          containerPort: 8080
+        {{- if .Values.resourcesEnabled }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        {{- end }} 
+{{- if .Values.ds2dataplane.app.env }}
+        envFrom:
+        - configMapRef:
+            name: {{ .Values.ds2dataplane.app.name }}-configmap
+{{- end }}
+{{- if .Values.ds2dataplane.app.configfile }}
+        volumeMounts:
+        - name: {{ .Values.ds2dataplane.app.name }}-configfilevolume
+          mountPath: /etc/participants/participants.json
+          subPath: participants.json
+      volumes:
+        - name: {{ .Values.ds2dataplane.app.name }}-configfilevolume
+          configMap: 
+            name: {{ .Values.ds2dataplane.app.name }}-configfilemap
+{{- end }}
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+{{- if .Values.ds2dataplane.image.privateRegistry.enabled }}
+      imagePullSecrets:
+      - name: {{ .Values.ds2dataplane.app.name }}-imagepullsecret
+{{- end }}
+

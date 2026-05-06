@@ -1,0 +1,18 @@
+{{- if .Values.vault.persistence.enabled -}}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ .Values.vault.app.name }}-pv
+  namespace: {{ .Release.Namespace }}
+  labels:
+    type: local
+spec:
+  storageClassName: {{ .Release.Namespace }}-{{ .Values.vault.app.name }}-storageclass
+  capacity:
+    storage: {{ .Values.vault.persistence.storage }} 
+  accessModes:
+    - {{ .Values.vault.persistence.accessmode }} 
+  hostPath:
+    path: {{ .Values.vault.persistence.path | quote }} 
+    type: DirectoryOrCreate
+{{- end }}

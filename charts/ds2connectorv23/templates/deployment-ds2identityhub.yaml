@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.ds2identityhub.app.name }} 
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.ds2identityhub.app.name }} 
+spec:
+  replicas: {{ .Values.ds2identityhub.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.ds2identityhub.app.name }} 
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.ds2identityhub.app.name }} 
+    spec:
+{{- if .Values.ds2identityhub.serviceAccount.create }}
+      serviceAccountName: {{ .Values.ds2identityhub.app.name }}-serviceaccount
+{{- end }}
+      containers:
+      - name: {{ .Values.ds2identityhub.app.name }}
+        image: {{ template "ds2identityhubimageURL" . }}
+        imagePullPolicy: {{ .Values.ds2identityhub.image.pullPolicy }} 
+        ports:
+        - name: http 
+          containerPort: 8080
+        {{- if .Values.resourcesEnabled }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        {{- end }} 
+{{- if .Values.ds2identityhub.app.env }}
+        envFrom:
+        - configMapRef:
+            name: {{ .Values.ds2identityhub.app.name }}-configmap
+{{- end }}
+        env:
+          - name: EDC_VAULT_HASHICORP_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: vault-root-token-secret
+                key: EDC_VAULT_HASHICORP_TOKEN
+{{- if .Values.ds2identityhub.app.configfile }}
+        volumeMounts:
+        - name: {{ .Values.ds2identityhub.app.name }}-configfilevolume
+          mountPath: /docker-entrypoint-initdb.d/init.sql
+          subPath: init.sql
+      volumes:
+        - name: {{ .Values.ds2identityhub.app.name }}-configfilevolume
+          configMap: 
+            name: {{ .Values.ds2identityhub.app.name }}-configfilemap
+{{- end }}
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+      initContainers:
+      - name: wait-vault-secret
+        image: bitnami/kubectl:latest
+        command:
+          - sh
+          - -c
+          - |
+            echo "Waiting for secret"
+            until kubectl get secret vault-root-token-secret -n {{ .Release.Namespace }}; do
+              echo "Secret not ready, retrying..."
+              sleep 5
+            done
+{{- if .Values.ds2identityhub.image.privateRegistry.enabled }}
+      imagePullSecrets:
+      - name: {{ .Values.ds2identityhub.app.name }}-imagepullsecret
+{{- end }}
+

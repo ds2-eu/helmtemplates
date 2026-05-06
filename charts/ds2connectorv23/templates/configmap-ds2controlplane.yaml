@@ -1,0 +1,41 @@
+{{- if .Values.ds2controlplane.app.env }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.ds2controlplane.app.name }}-configmap
+  namespace: {{ .Release.Namespace }}
+data:
+  EDC_PARTICIPANT_ID: {{ template "ds2identityhubdid" . }}
+  EDC_IAM_ISSUER_ID: {{ template "ds2identityhubdid" . }}
+  EDC_IAM_DID_WEB_USE_HTTPS: "true"
+  WEB_HTTP_PORT: "8080"
+  WEB_HTTP_PATH: /api
+  WEB_HTTP_MANAGEMENT_PORT: "8081"
+  WEB_HTTP_MANAGEMENT_PATH: /api/management
+  WEB_HTTP_MANAGEMENT_AUTH_TYPE: tokenbased
+  WEB_HTTP_MANAGEMENT_AUTH_KEY: password
+  WEB_HTTP_CONTROL_PORT: "8083"
+  WEB_HTTP_CONTROL_PATH: /api/control  
+  WEB_HTTP_PROTOCOL_PORT: "8082" 
+  WEB_HTTP_PROTOCOL_PATH: /api/dsp
+  WEB_HTTP_CATALOG_PORT: "8084"
+  WEB_HTTP_CATALOG_PATH: /api/catalog
+  WEB_HTTP_CATALOG_AUTH_TYPE: tokenbased
+  WEB_HTTP_CATALOG_AUTH_KEY: password
+  EDC_DSP_CALLBACK_ADDRESS: https://{{ template "ds2controlplanehostURL" . }}/api/dsp
+  EDC_IAM_STS_PRIVATEKEY_ALIAS: {{ template "ds2identityhubdid" . }}#key-1
+  EDC_IAM_STS_PUBLICKEY_ID: {{ template "ds2identityhubdid" . }}#key-1
+  EDC_VAULT_HASHICORP_URL: http://{{ .Values.vault.app.name }}:8200
+    #EDC_VAULT_HASHICORP_TOKEN: root
+  EDC_DATASOURCE_DEFAULT_URL: jdbc:postgresql://{{ .Values.postgres.app.name }}:{{ .Values.postgres.app.port }}/{{ .Values.app.organisationId }}
+  EDC_DATASOURCE_DEFAULT_USER: ds2connector
+  EDC_DATASOURCE_DEFAULT_PASSWORD: ds2connector
+  EDC_SQL_SCHEMA_AUTOCREATE: "true"  
+  EDC_IAM_STS_OAUTH_TOKEN_URL: http://{{ .Values.ds2identityhub.app.name }}:7086/api/sts/token
+  EDC_IAM_STS_OAUTH_CLIENT_ID: {{ template "ds2identityhubdid" . }}
+  EDC_IAM_STS_OAUTH_CLIENT_SECRET_ALIAS: {{ template "ds2identityhubdid" . }}-sts-client-secret
+  EDC_MVD_PARTICIPANTS_LIST_FILE: /etc/participants/participants.json
+  EDC_HOSTNAME: ds2controlplane
+  EDC_IAM_TRUSTED-ISSUER_ISSUER1_ID: did:web:identityhub.ds2.icelab.cloud:issuer
+  EDC_IAM_TRUSTED_ISSUER_ISSUER1_SUPPORTEDTYPES: MembershipCredential
+{{- end }}

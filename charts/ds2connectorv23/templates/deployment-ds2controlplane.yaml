@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.ds2controlplane.app.name }} 
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.ds2controlplane.app.name }} 
+spec:
+  replicas: {{ .Values.ds2controlplane.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.ds2controlplane.app.name }} 
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.ds2controlplane.app.name }} 
+    spec:
+{{- if .Values.ds2controlplane.serviceAccount.create }}
+      serviceAccountName: {{ .Values.ds2controlplane.app.name }}-serviceaccount
+{{- end }}
+      containers:
+      - name: {{ .Values.ds2controlplane.app.name }}
+        image: {{ template "ds2controlplaneimageURL" . }}
+        imagePullPolicy: {{ .Values.ds2controlplane.image.pullPolicy }} 
+        ports:
+        - name: http 
+          containerPort: 8080
+        {{- if .Values.resourcesEnabled }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        {{- end }} 
+{{- if .Values.ds2controlplane.app.env }}
+        envFrom:
+        - configMapRef:
+            name: {{ .Values.ds2controlplane.app.name }}-configmap
+{{- end }}
+        env:
+          - name: EDC_VAULT_HASHICORP_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: vault-root-token-secret
+                key: EDC_VAULT_HASHICORP_TOKEN
+{{- if .Values.ds2controlplane.app.configfile }}
+        volumeMounts:
+        - name: {{ .Values.ds2controlplane.app.name }}-configfilevolume
+          mountPath: /etc/participants/participants.json
+          subPath: participants.json
+      volumes:
+        - name: {{ .Values.ds2controlplane.app.name }}-configfilevolume
+          configMap: 
+            name: {{ .Values.ds2controlplane.app.name }}-configfilemap
+{{- end }}
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+{{- if .Values.ds2controlplane.image.privateRegistry.enabled }}
+      imagePullSecrets:
+      - name: {{ .Values.ds2controlplane.app.name }}-imagepullsecret
+{{- end }}
+

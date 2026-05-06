@@ -1,0 +1,14 @@
+{{- if .Values.vault.persistence.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.vault.app.name }}-pvc
+  namespace: {{ .Release.Namespace }}
+spec:
+  storageClassName: {{ .Release.Namespace }}-{{ .Values.vault.app.name }}-storageclass
+  accessModes:
+    - {{ .Values.vault.persistence.accessmode }} 
+  resources:
+    requests:
+      storage: {{ .Values.vault.persistence.storage }}
+{{- end }} 

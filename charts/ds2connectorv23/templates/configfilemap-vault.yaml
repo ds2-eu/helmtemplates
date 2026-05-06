@@ -1,0 +1,23 @@
+{{- if .Values.vault.app.configfile }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.vault.app.name }}-configfilemap
+  namespace: {{ .Release.Namespace }}
+data:
+  vault.hcl: |
+    storage "file" {
+      path = "/vault/data"
+    }
+
+    listener "tcp" {
+      address = "{{ .Values.vault.config.VAULT_DEV_LISTEN_ADDRESS }}"
+      tls_disable = 1
+    }
+
+    api_addr = "http://{{ .Values.vault.app.name }}:{{ .Values.vault.app.port }}"
+
+    disable_mlock = true
+
+    ui = true
+{{- end }}

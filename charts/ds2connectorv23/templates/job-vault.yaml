@@ -1,0 +1,81 @@
+{{- if .Values.vault.initjob.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.vault.app.name }}-job
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ .Values.vault.app.name }}-serviceaccount
+
+      containers:
+      - name: init
+        image: hashicorp/vault:1.21.4
+        command:
+          - /bin/sh
+          - -c
+          - |
+            export VAULT_ADDR="http://{{ .Values.vault.app.name }}:{{ .Values.vault.app.port }}"
+            APISERVER="https://kubernetes.default.svc"
+            NAMESPACE="$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)"
+            TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+            CACERT="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+            SECRET_NAME=vault-root-token-secret
+
+            sleep 10
+            
+            while ! vault status | grep Initialized ; do
+            echo "Waiting for Vault ..."
+            sleep 5
+            done
+            
+            if vault status -format=json | grep initialized | grep true; then
+              echo "Already initialized"
+              exit 0
+            fi
+
+            echo "Initializing..."
+            vault operator init -key-shares=1 -key-threshold=1 -format=json > /tmp/init.json
+
+            #UNSEAL_KEY=$(cat /tmp/init.json | sed -n 's/.*"unseal_keys_b64":\["\([^"]*\)".*/\1/p')
+            #UNSEAL_KEY=$(sed -n 's/.*"unseal_keys_b64":\["\([^"]*\)".*/\1/p' /tmp/init.json)
+            UNSEAL_KEY=$(sed -n '/"unseal_keys_b64"/{n; s/.*"\([^"]*\)".*/\1/p;}' /tmp/init.json)
+
+            echo "Unsealing..."
+            vault operator unseal $UNSEAL_KEY
+
+            echo "Root token:"
+            #ROOT_TOKEN=$(cat /tmp/init.json | sed -n 's/.*"root_token":"\([^"]*\)".*/\1/p')
+            ROOT_TOKEN=$(sed -n 's/.*"root_token":[[:space:]]*"\([^"]*\)".*/\1/p' /tmp/init.json)
+            echo $ROOT_TOKEN
+
+            UNSEAL_KEY_B64=$(printf %s "$UNSEAL_KEY" | base64)
+            ROOT_TOKEN_B64=$(printf %s "$ROOT_TOKEN" | base64)
+            
+            cat <<EOF > secret.json
+            {
+              "apiVersion": "v1",
+              "kind": "Secret",
+              "metadata": {
+              "name": "$SECRET_NAME"
+              },
+              "type": "Opaque",
+              "data": {
+                "unseal-key": "$UNSEAL_KEY_B64",
+                "root-token": "$ROOT_TOKEN_B64",
+                "EDC_VAULT_HASHICORP_TOKEN": "$ROOT_TOKEN_B64"
+              }
+            }
+            EOF
+
+            cat secret.json
+
+            wget \
+            --header="Authorization: Bearer $TOKEN" \
+            --header="Content-Type: application/json" \
+            --post-data="$(cat secret.json)" \
+            -O- \
+            --no-check-certificate \
+            $APISERVER/api/v1/namespaces/$NAMESPACE/secrets
+{{- end }}
