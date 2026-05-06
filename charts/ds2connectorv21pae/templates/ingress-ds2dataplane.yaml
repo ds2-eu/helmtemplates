@@ -1,0 +1,49 @@
+{{- if .Values.ds2dataplane.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.ds2dataplane.app.name }}-ingress 
+  namespace: {{ .Release.Namespace }}
+{{- with .Values.ds2dataplane.ingress.annotations }}
+  annotations:
+    # use the shared ingress-nginx
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - {{ template "ds2dataplanehostURL" . }}
+  rules:
+  - host: {{ template "ds2dataplanehostURL" . }}
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.ds2dataplane.app.name }} 
+            port:
+              number: {{ .Values.ds2dataplane.app.port }}
+      - path: /api/control
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.ds2dataplane.app.name }}
+            port:
+              number: 8083
+      - path: /api/public
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.ds2dataplane.app.name }} 
+            port:
+              number: 11002
+      - path: /undefined
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.ds2dataplane.app.name }}
+            port:
+              number: 1044
+{{- end }}
