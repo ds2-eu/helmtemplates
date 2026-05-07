@@ -75,7 +75,7 @@ ds2identityhub:
 
   image:
     name: ds2identityhub
-    tag: 0.0.2-betapae
+    tag: 0.0.3-betapae
     pullPoliy: Always
     privateRegistry:
       enabled: true
@@ -105,7 +105,7 @@ ds2controlplane:
 
   image:
     name: ds2controlplane
-    tag: 0.0.2-betapae
+    tag: 0.0.3-betapae
     pullPoliy: Always
     privateRegistry:
       enabled: true
@@ -135,7 +135,7 @@ ds2dataplane:
 
   image:
     name: ds2dataplane
-    tag: 0.0.2-betapae
+    tag: 0.0.3-betapae
     pullPoliy: Always
     privateRegistry:
       enabled: true
