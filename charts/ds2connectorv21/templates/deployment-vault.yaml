@@ -20,7 +20,7 @@ spec:
 {{- end }}
       containers:
       - name: {{ .Values.vault.app.name }}
-        image: hashicorp/vault:latest
+        image: hashicorp/vault:1.21.4
         imagePullPolicy: {{ .Values.vault.image.pullPolicy }} 
         ports:
         - name: http 
