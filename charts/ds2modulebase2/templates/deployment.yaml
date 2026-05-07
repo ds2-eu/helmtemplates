@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.app.name }} 
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }} 
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.app.name }} 
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.app.name }} 
+    spec:
+{{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ .Values.app.name }}-serviceaccount
+{{- end }}
+      containers:
+      - name: {{ .Values.app.name }}
+        image: {{ template "imageURL" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }} 
+        ports:
+        - name: http 
+          containerPort: {{ .Values.app.port }}
+        {{- if .Values.resourcesEnabled }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        {{- end }} 
+{{- if .Values.app.env }}
+        envFrom:
+        - configMapRef:
+            name: {{ .Values.app.name }}-configmap
+{{- end }}
+{{- if .Values.image.privateRegistry.enabled }}
+      imagePullSecrets:
+      - name: {{ .Values.app.name }}-imagepullsecret
+{{- end }}
+
