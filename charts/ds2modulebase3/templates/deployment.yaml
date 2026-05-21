@@ -18,6 +18,13 @@ spec:
 {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ .Values.app.name }}-serviceaccount
 {{- end }}
+{{- if .Values.ndots.enabled }}
+      dnsPolicy: ClusterFirst
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "1"
+{{- end }}
       containers:
       - name: {{ .Values.app.name }}
         image: {{ template "imageURL" . }}
@@ -34,6 +41,15 @@ spec:
         - configMapRef:
             name: {{ .Values.app.name }}-configmap
 {{- end }}
+        {{- if .Values.persistence.enabled }}
+        volumeMounts:
+        - name: {{ .Values.app.name }}-volumedata
+          mountPath: {{ .Values.persistence.mountpath | quote }}
+      volumes:
+        - name: {{ .Values.app.name }}-volumedata
+          persistentVolumeClaim:
+            claimName: {{ .Values.app.name }}-pvc
+        {{- end }}
 {{- if .Values.image.privateRegistry.enabled }}
       imagePullSecrets:
       - name: {{ .Values.app.name }}-imagepullsecret
