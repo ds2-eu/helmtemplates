@@ -12,6 +12,7 @@ spec:
     storage: {{ .Values.persistence.storage }} 
   accessModes:
     - {{ .Values.persistence.accessmode }} 
+  persistentVolumeReclaimPolicy: {{ .Values.persistence.reclaimpolicy }}
   hostPath:
     path: {{ .Values.persistence.path | quote }} 
     type: DirectoryOrCreate

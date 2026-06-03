@@ -63,6 +63,7 @@ persistence:
   path: "/idt/modulename/component"
   accessmode: ReadWriteOnce
   mountpath: "/modulename/data"
+  reclaimpolicy: Delete
 
 resourcesEnabled: false
 
