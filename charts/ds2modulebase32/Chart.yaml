@@ -1,5 +1,5 @@
 apiVersion: v2
-name: ds2modulebase4
+name: ds2modulebase32
 description: A base Helm chart for Kubernetes IDT DS2 - Deployment + Service
 
 # This base chart has basic deployment and clusterip service + configuration
@@ -7,9 +7,6 @@ description: A base Helm chart for Kubernetes IDT DS2 - Deployment + Service
 # Added persistence with persistent volumes and persistent volume claims
 # Added dns ndots configuration and clusterfirst for deployment
 # Added pv reclaim policy
-# This version includes an updated way of creating the image name based on the ds2 github organisation,  marketplace repository,
-# the module name and the stored idt configmap: ghcr.io/ds2-eu/mkt-modulename/imagename:imagetag -> added module.name in values and changed _helpers
-
 
 # A chart can be either an 'application' or a 'library' chart.
 #
