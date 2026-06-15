@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.vault.app.name }} 
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.vault.app.name }} 
+spec:
+  replicas: {{ .Values.vault.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.vault.app.name }} 
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.vault.app.name }} 
+    spec:
+{{- if .Values.vault.serviceAccount.create }}
+      serviceAccountName: {{ .Values.vault.app.name }}-serviceaccount
+{{- end }}
+      containers:
+      - name: {{ .Values.vault.app.name }}
+        image: hashicorp/vault:1.21.4
+        imagePullPolicy: {{ .Values.vault.image.pullPolicy }} 
+        ports:
+        - name: http 
+          containerPort: {{ .Values.vault.app.port }}
+        {{- if .Values.resourcesEnabled }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        {{- end }} 
+{{- if .Values.vault.app.env }}
+        envFrom:
+        - configMapRef:
+            name: {{ .Values.vault.app.name }}-configmap
+{{- end }}
+{{- if .Values.vault.app.configfile }}
+        volumeMounts:
+        - name: {{ .Values.vault.app.name }}-configfilevolume
+          mountPath: /docker-entrypoint-initdb.d/init.sql
+          subPath: init.sql
+      volumes:
+        - name: {{ .Values.vault.app.name }}-configfilevolume
+          configMap: 
+            name: {{ .Values.vault.app.name }}-configfilemap
+{{- end }}
+

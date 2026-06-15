@@ -1,16 +1,11 @@
 apiVersion: v2
-name: ds2modulebase5
+name: ds2connectorv25pae
 description: A base Helm chart for Kubernetes IDT DS2 - Deployment + Service
 
-# This base chart has basic deployment and clusterip service + configuration
-# Added ingress 
-# Added persistence with persistent volumes and persistent volume claims
-# Added dns ndots configuration and clusterfirst for deployment
-# Added pv reclaim policy
+# This base chart has basic deployment and clusterip service + configuration: ingress, no persistence
 # This version includes an updated way of creating the image name based on the ds2 github organisation,  marketplace repository,
-# the module name and the stored idt configmap: ghcr.io/ds2-eu/mkt-modulename-modulevariant/imagename:imagetag 
+# the module name and the stored idt configmap: ghcr.io/ds2-eu/mkt-modulename-modulevariant/imagename:imagetag
 # added module.name and module.variant in values and changed _helpers
-
 
 # A chart can be either an 'application' or a 'library' chart.
 #
