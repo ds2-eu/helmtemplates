@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.vault.app.name }} 
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.vault.app.name }}  
+    service: {{ .Values.vault.app.name }} 
+spec:
+  ports:
+  - port: {{ .Values.vault.app.port }} 
+    name: http
+    targetPort: {{ .Values.vault.app.port }}
+  type: ClusterIP
+  selector:
+    app: {{ .Values.vault.app.name }}
+

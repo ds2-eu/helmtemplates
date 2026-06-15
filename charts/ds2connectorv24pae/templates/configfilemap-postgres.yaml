@@ -1,0 +1,11 @@
+{{- if .Values.postgres.app.configfile }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.postgres.app.name }}-configfilemap
+  namespace: {{ .Release.Namespace }}
+data:
+  init.sql: |
+    CREATE USER ds2connector WITH ENCRYPTED PASSWORD 'ds2connector' SUPERUSER;
+    CREATE DATABASE {{ .Values.app.organisationId }};
+{{- end }}

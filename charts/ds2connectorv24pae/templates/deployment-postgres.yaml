@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.postgres.app.name }} 
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.postgres.app.name }} 
+spec:
+  replicas: {{ .Values.postgres.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.postgres.app.name }} 
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.postgres.app.name }} 
+    spec:
+{{- if .Values.postgres.serviceAccount.create }}
+      serviceAccountName: {{ .Values.postgres.app.name }}-serviceaccount
+{{- end }}
+      containers:
+      - name: {{ .Values.postgres.app.name }}
+        image: postgres:16.3-alpine3.20
+        imagePullPolicy: {{ .Values.postgres.image.pullPolicy }} 
+        ports:
+        - name: http 
+          containerPort: {{ .Values.postgres.app.port }}
+        {{- if .Values.resourcesEnabled }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        {{- end }} 
+{{- if .Values.postgres.app.env }}
+        envFrom:
+        - configMapRef:
+            name: {{ .Values.postgres.app.name }}-configmap
+{{- end }}
+{{- if .Values.postgres.app.configfile }}
+        volumeMounts:
+        - name: {{ .Values.postgres.app.name }}-configfilevolume
+          mountPath: /docker-entrypoint-initdb.d/init.sql
+          subPath: init.sql
+      volumes:
+        - name: {{ .Values.postgres.app.name }}-configfilevolume
+          configMap: 
+            name: {{ .Values.postgres.app.name }}-configfilemap
+{{- end }}
+

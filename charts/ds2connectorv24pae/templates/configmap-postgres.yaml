@@ -1,0 +1,9 @@
+{{- if .Values.postgres.app.env }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.postgres.app.name }}-configmap
+  namespace: {{ .Release.Namespace }}
+data:
+  {{- toYaml .Values.postgres.config | nindent 4 }}
+{{- end }}

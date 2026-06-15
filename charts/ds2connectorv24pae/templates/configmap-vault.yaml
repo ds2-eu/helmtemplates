@@ -1,0 +1,9 @@
+{{- if .Values.vault.app.env }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.vault.app.name }}-configmap
+  namespace: {{ .Release.Namespace }}
+data:
+  {{- toYaml .Values.vault.config | nindent 4 }}
+{{- end }}
