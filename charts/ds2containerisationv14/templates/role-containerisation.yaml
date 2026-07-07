@@ -44,7 +44,7 @@ rules:
   # Flux HelmReleases
   - apiGroups: ["helm.toolkit.fluxcd.io"]
     resources: ["helmreleases"]
-    verbs: ["list", "delete"]
+    verbs: ["list", "delete", "get", "watch"]
 
 
 ---
