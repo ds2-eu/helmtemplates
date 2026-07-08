@@ -53,6 +53,9 @@ service:
   port: 80
   nodePort: 30808
 
+ndots:
+  enabled: true
+
 ingress:
   enabled: true
   annotations: {}

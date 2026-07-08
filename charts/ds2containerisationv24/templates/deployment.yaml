@@ -18,6 +18,13 @@ spec:
 {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ .Values.app.name }}-serviceaccount
 {{- end }}
+{{- if .Values.ndots.enabled }}
+      dnsPolicy: ClusterFirst
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "1"
+{{- end }}
       containers:
       - name: {{ .Values.app.name }}
         image: {{ template "imageURL" . }}

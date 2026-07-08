@@ -5,7 +5,8 @@ description: A base Helm chart for Kubernetes IDT DS2 - Deployment + Service
 # This base chart has basic deployment and clusterip service + configuration and ingress
 # This version includes an updated way of creating the image name based on the ds2 github organisation,  marketplace repository,
 # the module name and the stored idt configmap: ghcr.io/ds2-eu/mkt-modulename/imagename:imagetag -> added module.name in values and changed _helpers
-# add new kubernetes roles
+# add new kubernetes roles: deployments, pods, helmreleases, pvs, statefulsets, daemonsets ...
+# added ndots
 
 # A chart can be either an 'application' or a 'library' chart.
 #
@@ -20,10 +21,10 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 1.0.0
+version: 1.0.1
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.0.0"
+appVersion: "1.0.1"
