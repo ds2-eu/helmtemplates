@@ -1,0 +1,158 @@
+{{- $ns := include "drm.namespace" . -}}
+{{- $domain := include "drm.domain" . -}}
+# ============================================================================
+# DRM UI Backend (ilab-ds2-drm-ui-backend)
+# Node/Express middleware — proxies between frontend and fabric-rest-sample
+# ============================================================================
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: drm-ui-backend
+  namespace: {{ $ns }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: drm-ui-backend
+  template:
+    metadata:
+      labels:
+        app: drm-ui-backend
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: main
+          image: {{ .Values.images.drmUiBackend.repository }}:{{ .Values.images.drmUiBackend.tag }}
+          imagePullPolicy: {{ .Values.images.drmUiBackend.pullPolicy }}
+          env:
+            - name: APP_NAME
+              value: "drm-ui-backend"
+            - name: APP_HOST
+              value: "0.0.0.0"
+            - name: APP_PORT
+              value: "3000"
+            - name: NODE_ENV
+              value: "production"
+            - name: LOG_ENABLED
+              value: "true"
+            - name: LOG_LEVEL
+              value: {{ .Values.drmUiBackend.logLevel | quote }}
+            - name: LEDGER_EXTRACTOR
+              value: {{ .Values.drmUiBackend.ledgerExtractor | quote }}
+            - name: READ_BY_ID_PATH
+              value: {{ .Values.drmUiBackend.readByIdPath | quote }}
+            - name: READ_ALL_PATH
+              value: {{ .Values.drmUiBackend.readAllPath | quote }}
+            - name: ENROLL_PATH
+              value: {{ .Values.drmUiBackend.enrollPath | quote }}
+            - name: VERIFY_PATH
+              value: {{ .Values.drmUiBackend.verifyPath | quote }}
+            - name: ENROLL_ADMIN_PATH
+              value: {{ .Values.drmUiBackend.enrollAdminPath | quote }}
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: drm-ui-backend
+  namespace: {{ $ns }}
+spec:
+  ports:
+    - name: http
+      port: 3000
+      protocol: TCP
+  selector:
+    app: drm-ui-backend
+
+# ============================================================================
+# DRM UI Frontend (ilab-ds2-drm-user-interface)
+# Vue 3 SPA served by nginx — proxies /api/* to drm-ui-backend
+# VITE_API_TARGET is substituted at container startup by docker-entrypoint.sh
+# ============================================================================
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: drm-ui-frontend
+  namespace: {{ $ns }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: drm-ui-frontend
+  template:
+    metadata:
+      labels:
+        app: drm-ui-frontend
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: main
+          image: {{ .Values.images.drmUiFrontend.repository }}:{{ .Values.images.drmUiFrontend.tag }}
+          imagePullPolicy: {{ .Values.images.drmUiFrontend.pullPolicy }}
+          env:
+            # nginx.conf.template is rendered at startup using this value
+            # Points to the drm-ui-backend service inside the cluster
+            - name: VITE_API_TARGET
+              value: "http://drm-ui-backend:3000"
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: drm-ui-frontend
+  namespace: {{ $ns }}
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+  selector:
+    app: drm-ui-frontend
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: 60s
+    nginx.ingress.kubernetes.io/proxy-body-size: 256m
+  name: drm-ui-frontend
+  namespace: {{ $ns }}
+spec:
+  {{- include "drm.ingressClass" . | nindent 2 }}
+  rules:
+    - host: {{ .Values.drmUiFrontend.host }}
+      http:
+        paths:
+          - backend:
+              service:
+                name: drm-ui-frontend
+                port:
+                  name: http
+            path: /
+            pathType: ImplementationSpecific

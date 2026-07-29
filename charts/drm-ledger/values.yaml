@@ -1,0 +1,133 @@
+# DRM Ledger Helm Chart - Configuration Values
+
+global:
+  # Kubernetes namespace for all resources
+  namespace: drm-ledger
+  # Set to false if namespace already exists
+  createNamespace: true
+  # Domain for ingress rules (localho.st resolves to 127.0.0.1)
+  domain: localho.st
+  # Storage class for PVCs (must exist in your cluster)
+  storageClass: standard
+  # Storage size per org PVC
+  storageSize: 1Gi
+
+# Fabric CA bootstrap admin credentials
+caAdmin:
+  user: rcaadmin
+  password: rcaadminpw
+
+# Channel configuration
+channel:
+  name: mychannel
+
+# CouchDB credentials (sidecar in peer pods)
+couchdb:
+  user: admin
+  password: adminpw
+
+# Chaincode configuration
+chaincode:
+  name: asset-transfer-basic
+  label: asset-transfer-basic
+  version: "1"
+  sequence: "1"
+
+# REST API configuration
+restApi:
+  org1ApiKey: "97834158-3224-4CE7-95F9-A148C886653E"
+  org2ApiKey: "BC42E734-062D-4AEE-A591-5973CB763430"
+  logLevel: debug
+  port: "3000"
+  commitTimeout: "300"
+  endorseTimeout: "30"
+  queryTimeout: "3"
+
+# Container images
+# All images live in the single ghcr.io/ds2-eu/ds2charts/drm repository,
+# distinguished by tag. Pulling requires the drm-hook-imagepullsecret secret.
+images:
+  fabricCA:
+    repository: ghcr.io/ds2-eu/ds2charts/drm
+    tag: fabric-ca-1.5
+    pullPolicy: IfNotPresent
+  fabricOrderer:
+    repository: ghcr.io/ds2-eu/ds2charts/drm
+    tag: fabric-orderer-2.5
+    pullPolicy: IfNotPresent
+  fabricPeer:
+    repository: ghcr.io/ds2-eu/ds2charts/drm
+    tag: fabric-peer-2.5
+    pullPolicy: IfNotPresent
+  fabricTools:
+    repository: ghcr.io/ds2-eu/ds2charts/drm
+    tag: fabric-tools-2.5
+    pullPolicy: IfNotPresent
+  couchdb:
+    repository: ghcr.io/ds2-eu/ds2charts/drm
+    tag: couchdb-3.3.3
+    pullPolicy: IfNotPresent
+  redis:
+    repository: ghcr.io/ds2-eu/ds2charts/drm
+    tag: redis-6.2.5
+    pullPolicy: IfNotPresent
+  busybox:
+    repository: ghcr.io/ds2-eu/ds2charts/drm
+    tag: busybox-1.36
+    pullPolicy: IfNotPresent
+  chaincode:
+    repository: ghcr.io/ds2-eu/ds2charts/drm
+    tag: chaincode
+    pullPolicy: IfNotPresent
+  restApi:
+    repository: ghcr.io/ds2-eu/ds2charts/drm
+    tag: drm-rest-api
+    pullPolicy: Always
+  kubectl:
+    repository: ghcr.io/ds2-eu/ds2charts/drm
+    tag: kubectl-latest
+    pullPolicy: IfNotPresent
+  drmUiBackend:
+    repository: ghcr.io/ds2-eu/ds2charts/drm
+    tag: drm-ui-be
+    pullPolicy: Always
+  drmUiFrontend:
+    repository: ghcr.io/ds2-eu/ds2charts/drm
+    tag: drm-ui-fe
+    pullPolicy: Always
+
+# Private registry credentials for ghcr.io/ds2-eu (Helm creates the secret when
+# username/password are provided; otherwise the secret is expected to already
+# exist in the namespace, as supplied by the influx/Flux release layer).
+imageRegistry:
+  name: drm-hook-imagepullsecret
+  server: ghcr.io
+  username: ""
+  password: ""
+
+# Image pull secret references used by pods
+imagePullSecrets:
+  - name: drm-hook-imagepullsecret
+
+# DRM UI Backend (ilab-ds2-drm-ui-backend)
+drmUiBackend:
+  logLevel: debug
+  # URL of the Fabric REST API inside the cluster
+  ledgerExtractor: "http://fabric-rest-sample:3000"
+  readByIdPath: "/ledger/readByID"
+  readAllPath: "/ledger/readAll"
+  enrollPath: "/enroll"
+  verifyPath: "/enroll/verify"
+  enrollAdminPath: "/enroll/enrollAdmin"
+
+# DRM UI Frontend (ilab-ds2-drm-user-interface)
+drmUiFrontend:
+  # Ingress hostname for the frontend
+  host: "drm-ui.localho.st"
+
+# Ingress configuration
+ingress:
+  # Leave className empty to use the cluster default ingress controller (recommended for Rancher).
+  # Set to "nginx" only if you have a specific named ingress class to target.
+  className: "nginx"
+  sslPassthrough: true

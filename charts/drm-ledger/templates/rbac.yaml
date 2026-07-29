@@ -1,0 +1,70 @@
+{{- $ns := include "drm.namespace" . -}}
+# RBAC for Fabric k8s chaincode builder
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fabric-builder-role
+  namespace: {{ $ns }}
+rules:
+  - apiGroups: ["", "apps", "batch"]
+    resources: ["pods", "jobs", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fabric-builder-rolebinding
+  namespace: {{ $ns }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: fabric-builder-role
+subjects:
+  - namespace: {{ $ns }}
+    kind: ServiceAccount
+    name: default
+
+# RBAC for Helm hook Jobs (need kubectl exec, cp, apply, patch)
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: drm-hook-sa
+  namespace: {{ $ns }}
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: drm-hook-role
+  namespace: {{ $ns }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/exec", "pods/log", "configmaps", "secrets", "services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: drm-hook-rolebinding
+  namespace: {{ $ns }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: drm-hook-role
+subjects:
+  - kind: ServiceAccount
+    name: drm-hook-sa
+    namespace: {{ $ns }}

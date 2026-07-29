@@ -1,0 +1,199 @@
+{{- $ns := include "drm.namespace" . -}}
+# ============================================================================
+# Hook: Deploy Chaincode - Package, install, patch, approve, commit
+# ============================================================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: deploy-chaincode-script
+  namespace: {{ $ns }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "9"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+data:
+  deploy-chaincode.sh: |
+    #!/bin/sh
+    set -e
+
+    NAMESPACE="{{ $ns }}"
+    CHANNEL_NAME="{{ .Values.channel.name }}"
+    CC_NAME="{{ .Values.chaincode.name }}"
+    CC_LABEL="{{ .Values.chaincode.label }}"
+    CC_VERSION="{{ .Values.chaincode.version }}"
+    CC_SEQUENCE="{{ .Values.chaincode.sequence }}"
+
+    echo "=== DRM Ledger - Chaincode Deployment ==="
+
+    # Verify peers are running
+    for peer in org1-peer1 org1-peer2 org2-peer1 org2-peer2; do
+      kubectl -n "${NAMESPACE}" rollout status "deploy/${peer}" --timeout=120s
+    done
+
+    # --- Step 1: Create CcaaS chaincode package ---
+    echo "=== Creating CcaaS chaincode package ==="
+    TMPDIR=$(mktemp -d)
+
+    cat > "${TMPDIR}/connection.json" <<CONNEOF
+    {
+      "address": "{{"{{"}}{{".peername"}}{{"}}"}}-ccaas-${CC_NAME}:9999",
+      "dial_timeout": "10s",
+      "tls_required": false
+    }
+    CONNEOF
+
+    cat > "${TMPDIR}/metadata.json" <<METAEOF
+    {
+      "type": "ccaas",
+      "label": "${CC_LABEL}"
+    }
+    METAEOF
+
+    tar -czf "${TMPDIR}/code.tar.gz" -C "${TMPDIR}" connection.json
+    tar -czf "${TMPDIR}/${CC_NAME}.tgz" -C "${TMPDIR}" code.tar.gz metadata.json
+
+    CC_SHA256=$(sha256sum "${TMPDIR}/${CC_NAME}.tgz" | cut -d ' ' -f 1)
+    CHAINCODE_ID="${CC_LABEL}:${CC_SHA256}"
+    PACKAGE_FILE="${TMPDIR}/${CC_NAME}.tgz"
+
+    echo "  CHAINCODE_ID: ${CHAINCODE_ID}"
+
+    # --- Step 2: Install chaincode on all peers ---
+    echo "=== Installing chaincode on all peers ==="
+    for peer in org1-peer1 org1-peer2 org2-peer1 org2-peer2; do
+      org="${peer%%-*}"
+      msp_id="$(echo "${org}" | sed 's/org/Org/')MSP"
+      admin_msp="/var/hyperledger/fabric/organizations/peerOrganizations/${org}.example.com/users/${org}admin/msp"
+
+      echo "  Installing on ${peer}..."
+      pod=$(kubectl -n "${NAMESPACE}" get pod -l "app=${peer}" -o jsonpath='{.items[0].metadata.name}')
+      kubectl cp "${PACKAGE_FILE}" "${NAMESPACE}/${pod}:/tmp/${CC_NAME}.tgz" -c main
+      kubectl -n "${NAMESPACE}" exec "${pod}" -c main -- \
+        env CORE_PEER_MSPCONFIGPATH="${admin_msp}" CORE_PEER_LOCALMSPID="${msp_id}" \
+        peer lifecycle chaincode install "/tmp/${CC_NAME}.tgz" 2>&1 || \
+        echo "  ${peer}: may already be installed"
+    done
+
+    # --- Step 3: Patch chaincode deployments with real CHAINCODE_ID and scale up ---
+    echo "=== Patching chaincode deployments ==="
+    for peerNoDash in org1peer1 org1peer2 org2peer1 org2peer2; do
+      deploy="${peerNoDash}-ccaas-${CC_NAME}"
+      echo "  Patching ${deploy} with CHAINCODE_ID..."
+      kubectl -n "${NAMESPACE}" patch deployment "${deploy}" --type=json -p="[
+        {\"op\": \"replace\", \"path\": \"/spec/replicas\", \"value\": 1},
+        {\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/env/1/value\", \"value\": \"${CHAINCODE_ID}\"},
+        {\"op\": \"replace\", \"path\": \"/spec/template/spec/containers/0/env/2/value\", \"value\": \"${CHAINCODE_ID}\"}
+      ]"
+    done
+
+    echo "  Waiting for chaincode pods..."
+    for peerNoDash in org1peer1 org1peer2 org2peer1 org2peer2; do
+      kubectl -n "${NAMESPACE}" rollout status "deploy/${peerNoDash}-ccaas-${CC_NAME}" --timeout=120s
+    done
+
+    # --- Step 4: Copy TLS certs to peer pods ---
+    echo "=== Preparing TLS certs ==="
+    TLSDIR=$(mktemp -d)
+    kubectl -n "${NAMESPACE}" get secret org0-ca-tls-cert -o jsonpath='{.data.ca\.crt}' | base64 -d > "${TLSDIR}/org0-tlsca.pem"
+    kubectl -n "${NAMESPACE}" get secret org1-ca-tls-cert -o jsonpath='{.data.ca\.crt}' | base64 -d > "${TLSDIR}/org1-tlsca.pem"
+    kubectl -n "${NAMESPACE}" get secret org2-ca-tls-cert -o jsonpath='{.data.ca\.crt}' | base64 -d > "${TLSDIR}/org2-tlsca.pem"
+
+    org1_pod=$(kubectl -n "${NAMESPACE}" get pod -l "app=org1-peer1" -o jsonpath='{.items[0].metadata.name}')
+    kubectl cp "${TLSDIR}/org0-tlsca.pem" "${NAMESPACE}/${org1_pod}:/tmp/org0-tlsca.pem" -c main
+    kubectl cp "${TLSDIR}/org1-tlsca.pem" "${NAMESPACE}/${org1_pod}:/tmp/org1-tlsca.pem" -c main
+    kubectl cp "${TLSDIR}/org2-tlsca.pem" "${NAMESPACE}/${org1_pod}:/tmp/org2-tlsca.pem" -c main
+
+    org2_pod=$(kubectl -n "${NAMESPACE}" get pod -l "app=org2-peer1" -o jsonpath='{.items[0].metadata.name}')
+    kubectl cp "${TLSDIR}/org0-tlsca.pem" "${NAMESPACE}/${org2_pod}:/tmp/org0-tlsca.pem" -c main
+    kubectl cp "${TLSDIR}/org2-tlsca.pem" "${NAMESPACE}/${org2_pod}:/tmp/org2-tlsca.pem" -c main
+
+    # --- Step 5: Approve chaincode ---
+    echo "=== Approving chaincode ==="
+    for org in org1 org2; do
+      peer="${org}-peer1"
+      msp_id="$(echo "${org}" | sed 's/org/Org/')MSP"
+      admin_msp="/var/hyperledger/fabric/organizations/peerOrganizations/${org}.example.com/users/${org}admin/msp"
+      pod=$(kubectl -n "${NAMESPACE}" get pod -l "app=${peer}" -o jsonpath='{.items[0].metadata.name}')
+
+      echo "  Approving for ${msp_id}..."
+      kubectl -n "${NAMESPACE}" exec "${pod}" -c main -- \
+        env CORE_PEER_MSPCONFIGPATH="${admin_msp}" CORE_PEER_LOCALMSPID="${msp_id}" \
+        peer lifecycle chaincode approveformyorg \
+          --channelID "${CHANNEL_NAME}" \
+          --name "${CC_NAME}" \
+          --version "${CC_VERSION}" \
+          --package-id "${CHAINCODE_ID}" \
+          --sequence "${CC_SEQUENCE}" \
+          --orderer org0-orderer1:6050 \
+          --tls \
+          --cafile /tmp/org0-tlsca.pem
+    done
+
+    # --- Step 6: Commit chaincode ---
+    echo "=== Committing chaincode ==="
+    admin_msp="/var/hyperledger/fabric/organizations/peerOrganizations/org1.example.com/users/org1admin/msp"
+    kubectl -n "${NAMESPACE}" exec "${org1_pod}" -c main -- \
+      env CORE_PEER_MSPCONFIGPATH="${admin_msp}" CORE_PEER_LOCALMSPID="Org1MSP" \
+      peer lifecycle chaincode commit \
+        --channelID "${CHANNEL_NAME}" \
+        --name "${CC_NAME}" \
+        --version "${CC_VERSION}" \
+        --sequence "${CC_SEQUENCE}" \
+        --orderer org0-orderer1:6050 \
+        --tls \
+        --cafile /tmp/org0-tlsca.pem \
+        --peerAddresses org1-peer1:7051 \
+        --tlsRootCertFiles /tmp/org1-tlsca.pem \
+        --peerAddresses org2-peer1:7051 \
+        --tlsRootCertFiles /tmp/org2-tlsca.pem
+
+    # --- Step 7: Verify ---
+    echo "=== Verifying chaincode ==="
+    kubectl -n "${NAMESPACE}" exec "${org1_pod}" -c main -- \
+      env CORE_PEER_MSPCONFIGPATH="${admin_msp}" CORE_PEER_LOCALMSPID="Org1MSP" \
+      peer lifecycle chaincode querycommitted \
+        --channelID "${CHANNEL_NAME}" \
+        --name "${CC_NAME}"
+
+    # Cleanup
+    rm -rf "${TMPDIR}" "${TLSDIR}" 2>/dev/null || true
+
+    echo "=== Chaincode Deployment Complete ==="
+    echo "  Chaincode:    ${CC_NAME}"
+    echo "  Chaincode ID: ${CHAINCODE_ID}"
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: drm-deploy-chaincode
+  namespace: {{ $ns }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      serviceAccountName: drm-hook-sa
+      restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: deploy-cc
+          image: {{ .Values.images.kubectl.repository }}:{{ .Values.images.kubectl.tag }}
+          command: ["/bin/sh", "/scripts/deploy-chaincode.sh"]
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+      volumes:
+        - name: scripts
+          configMap:
+            name: deploy-chaincode-script
+            defaultMode: 0755

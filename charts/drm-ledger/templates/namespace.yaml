@@ -1,0 +1,9 @@
+{{- if .Values.global.createNamespace }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "drm.namespace" . }}
+  labels:
+    {{- include "drm.labels" . | nindent 4 }}
+{{- end }}
