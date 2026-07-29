@@ -14,7 +14,7 @@ DRM Ledger Helm Chart - Template Helpers
 
 {{/* Domain */}}
 {{- define "drm.domain" -}}
-{{- Release.Namespace }}
+{{- .Release.Namespace }}
 {{- end }}
 
 {{/* Common labels */}}
