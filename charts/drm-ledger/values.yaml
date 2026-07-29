@@ -2,9 +2,9 @@
 
 global:
   # Kubernetes namespace for all resources
-  namespace: drm-ledger
+  namespace: ""
   # Set to false if namespace already exists
-  createNamespace: true
+  createNamespace: false
   # Domain for ingress rules (localho.st resolves to 127.0.0.1)
   domain: localho.st
   # Storage class for PVCs (must exist in your cluster)
