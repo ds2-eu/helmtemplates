@@ -1,0 +1,39 @@
+===================================================================
+  DRM Ledger - Hyperledger Fabric Network
+===================================================================
+
+The Helm chart is deploying the full Fabric network.
+Post-install hooks are running sequentially:
+
+  1. Bootstrap Enroll  (weight=0)  - Enrolling identities via CA pods
+  2. Bootstrap Channel (weight=5)  - Creating channel, joining nodes
+  3. Deploy Chaincode  (weight=10) - Installing & committing chaincode
+  4. Deploy REST API   (weight=15) - Creating config & scaling REST API
+
+Monitor hook progress:
+  kubectl -n {{ include "drm.namespace" . }} get jobs -w
+  kubectl -n {{ include "drm.namespace" . }} logs job/drm-bootstrap-enroll -f
+  kubectl -n {{ include "drm.namespace" . }} logs job/drm-bootstrap-channel -f
+  kubectl -n {{ include "drm.namespace" . }} logs job/drm-deploy-chaincode -f
+  kubectl -n {{ include "drm.namespace" . }} logs job/drm-deploy-rest-api -f
+
+Once complete, check all pods:
+  kubectl -n {{ include "drm.namespace" . }} get pods
+
+Endpoints (TLS terminated by nginx with its default certificate):
+  REST API: https://fabric-rest-sample.{{ include "drm.domain" . }}
+  DRM UI:   https://{{ include "drm.uiHost" . }}
+
+API Keys:
+  Org1: {{ .Values.restApi.org1ApiKey }}
+  Org2: {{ .Values.restApi.org2ApiKey }}
+
+Test:
+  curl https://fabric-rest-sample.{{ include "drm.domain" . }}/api/assets \
+    -H 'X-Api-Key: {{ .Values.restApi.org1ApiKey }}'
+
+To uninstall:
+  helm uninstall {{ .Release.Name }} -n {{ include "drm.namespace" . }}
+
+  The PersistentVolumes use reclaimPolicy Retain - the ledger data and the
+  host directories under {{ .Values.persistence.path }} survive an uninstall.

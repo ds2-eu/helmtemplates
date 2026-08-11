@@ -1,0 +1,141 @@
+# DRM Ledger Helm Chart - Configuration Values
+
+# Module name. Used to build the Marketplace image path and the pull secret name:
+#   <registryUrl>/ds2-eu/mkt-<module.name>/<image.name>:<image.tag>
+module:
+  name: drm
+
+# The ingress domain is NOT configured here - it is read at install time from
+# ConfigMap icekube/idtconfigmap (key: domain), the same source the DS2 base
+# charts use, so every module shares the organisation domain.
+
+# Fabric CA bootstrap admin credentials
+caAdmin:
+  user: rcaadmin
+  password: rcaadminpw
+
+# Channel configuration
+channel:
+  name: mychannel
+
+# CouchDB credentials (sidecar in peer pods)
+couchdb:
+  user: admin
+  password: adminpw
+
+# Chaincode configuration
+chaincode:
+  name: asset-transfer-basic
+  label: asset-transfer-basic
+  version: "1"
+  sequence: "1"
+
+# REST API configuration
+restApi:
+  org1ApiKey: "97834158-3224-4CE7-95F9-A148C886653E"
+  org2ApiKey: "BC42E734-062D-4AEE-A591-5973CB763430"
+  logLevel: debug
+  port: "3000"
+  commitTimeout: "300"
+  endorseTimeout: "30"
+  queryTimeout: "3"
+
+# Container images.
+# The registry URL is read at install time from ConfigMap icekube/idtconfigmap
+# (key: registryUrl). Only the image name and tag are configured here - the full
+# path is built by the drm.imageURL helper as
+#   <registryUrl>/ds2-eu/mkt-<module.name>/<name>:<tag>
+images:
+  fabricCA:
+    name: fabric-ca
+    tag: "1.5"
+    pullPolicy: IfNotPresent
+  fabricOrderer:
+    name: fabric-orderer
+    tag: "2.5"
+    pullPolicy: IfNotPresent
+  fabricPeer:
+    name: fabric-peer
+    tag: "2.5"
+    pullPolicy: IfNotPresent
+  fabricTools:
+    name: fabric-tools
+    tag: "2.5"
+    pullPolicy: IfNotPresent
+  couchdb:
+    name: couchdb
+    tag: "3.3.3"
+    pullPolicy: IfNotPresent
+  redis:
+    name: redis
+    tag: "6.2.5"
+    pullPolicy: IfNotPresent
+  busybox:
+    name: busybox
+    tag: "1.36"
+    pullPolicy: IfNotPresent
+  chaincode:
+    name: chaincode
+    tag: latest
+    pullPolicy: IfNotPresent
+  restApi:
+    name: drm-rest-api
+    tag: latest
+    pullPolicy: Always
+  kubectl:
+    name: kubectl
+    tag: latest
+    pullPolicy: IfNotPresent
+  drmUiBackend:
+    name: drm-ui-be
+    tag: latest
+    pullPolicy: Always
+  drmUiFrontend:
+    name: drm-ui-fe
+    tag: latest
+    pullPolicy: Always
+
+# Private registry. Credentials are read at install time from Secret
+# icekube/idtsecret (keys: username, token) and turned into a single
+# dockerconfigjson secret shared by every component in the chart.
+image:
+  privateRegistry:
+    # Create the pull secret and reference it from every pod
+    enabled: true
+    # Set to true when a global pull secret with the same name is already
+    # provided in the namespace - the chart will reference it without creating it
+    global: false
+
+# Persistence. The chart ships a PersistentVolume + PersistentVolumeClaim pair
+# per organisation, bound to each other through a release-specific storage class,
+# so no dynamically provisioned storage class is required in the cluster.
+persistence:
+  enabled: true
+  storage: 1Gi
+  accessmode: ReadWriteOnce
+  reclaimpolicy: Retain
+  # Host path base directory - one sub-directory per organisation is created
+  path: /mnt/drm
+
+# DRM UI Backend (ilab-ds2-drm-ui-backend)
+drmUiBackend:
+  logLevel: debug
+  # URL of the Fabric REST API inside the cluster
+  ledgerExtractor: "http://fabric-rest-sample:3000"
+  readByIdPath: "/ledger/readByID"
+  readAllPath: "/ledger/readAll"
+  enrollPath: "/enroll"
+  verifyPath: "/enroll/verify"
+  enrollAdminPath: "/enroll/enrollAdmin"
+
+# DRM UI Frontend (ilab-ds2-drm-user-interface)
+drmUiFrontend:
+  # Hostname prefix - the ingress host becomes <name>.<domain>
+  name: drm-ui
+
+# Ingress configuration
+ingress:
+  # Leave className empty to use the cluster default ingress controller.
+  # Set to "nginx" only if you have a specific named ingress class to target.
+  className: "nginx"
+  sslPassthrough: true

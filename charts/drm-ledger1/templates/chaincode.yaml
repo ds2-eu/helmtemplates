@@ -1,0 +1,56 @@
+{{- $ns := include "drm.namespace" . -}}
+{{- $ccName := .Values.chaincode.name -}}
+# ============================================================================
+# Chaincode-as-a-Service (CcaaS) Deployments + Services
+# Deployed with placeholder CHAINCODE_ID; patched by deploy-chaincode hook
+# ============================================================================
+{{- range $org := list "org1" "org2" }}
+{{- range $i := list 1 2 }}
+{{- $peerNoDash := printf "%speer%d" $org (int $i) }}
+{{- $deployName := printf "%s-ccaas-%s" $peerNoDash $ccName }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $deployName }}
+  namespace: {{ $ns }}
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: {{ $deployName }}
+  template:
+    metadata:
+      labels:
+        app: {{ $deployName }}
+    spec:
+      {{- include "drm.imagePullSecrets" $ | nindent 6 }}
+      containers:
+        - name: main
+          image: {{ include "drm.manualimageURL" (dict "ctx" $ "image" $.Values.images.chaincode) }}
+          imagePullPolicy: {{ $.Values.images.chaincode.pullPolicy }}
+          env:
+            - name: CHAINCODE_SERVER_ADDRESS
+              value: 0.0.0.0:9999
+            - name: CHAINCODE_ID
+              value: "placeholder"
+            - name: CORE_CHAINCODE_ID_NAME
+              value: "placeholder"
+          ports:
+            - containerPort: 9999
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $deployName }}
+  namespace: {{ $ns }}
+spec:
+  ports:
+    - name: chaincode
+      port: 9999
+      protocol: TCP
+  selector:
+    app: {{ $deployName }}
+{{- end }}
+{{- end }}

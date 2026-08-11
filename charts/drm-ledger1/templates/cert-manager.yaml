@@ -1,0 +1,122 @@
+{{- $ns := include "drm.namespace" . -}}
+{{- $domain := include "drm.domain" . -}}
+# Root TLS certificate issuer (self-signed)
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: root-tls-cert-issuer
+  namespace: {{ $ns }}
+spec:
+  selfSigned: {}
+
+# Per-org intermediate CA certificates + issuers
+{{- range $org := list "org0" "org1" "org2" }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $org }}-tls-cert-issuer
+  namespace: {{ $ns }}
+spec:
+  isCA: true
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  commonName: {{ $org }}.example.com
+  secretName: {{ $org }}-tls-cert-issuer-secret
+  issuerRef:
+    name: root-tls-cert-issuer
+    kind: Issuer
+    group: cert-manager.io
+
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ $org }}-tls-cert-issuer
+  namespace: {{ $ns }}
+spec:
+  ca:
+    secretName: {{ $org }}-tls-cert-issuer-secret
+{{- end }}
+
+# CA TLS certificates
+{{- range $org := list "org0" "org1" "org2" }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $org }}-ca-tls-cert
+  namespace: {{ $ns }}
+spec:
+  isCA: false
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  dnsNames:
+    - localhost
+    - {{ $org }}-ca
+    - {{ $org }}-ca.{{ $ns }}.svc.cluster.local
+    - {{ $org }}-ca.{{ $domain }}
+  ipAddresses:
+    - 127.0.0.1
+  secretName: {{ $org }}-ca-tls-cert
+  issuerRef:
+    name: {{ $org }}-tls-cert-issuer
+{{- end }}
+
+# Orderer TLS certificates
+{{- range $i := list 1 2 3 }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: org0-orderer{{ $i }}-tls-cert
+  namespace: {{ $ns }}
+spec:
+  isCA: false
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  dnsNames:
+    - localhost
+    - org0-orderer{{ $i }}
+    - org0-orderer{{ $i }}.{{ $ns }}.svc.cluster.local
+    - org0-orderer{{ $i }}.{{ $domain }}
+    - org0-orderer{{ $i }}-admin.{{ $domain }}
+  ipAddresses:
+    - 127.0.0.1
+  secretName: org0-orderer{{ $i }}-tls-cert
+  issuerRef:
+    name: org0-tls-cert-issuer
+{{- end }}
+
+# Peer TLS certificates
+{{- range $org := list "org1" "org2" }}
+{{- range $i := list 1 2 }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $org }}-peer{{ $i }}-tls-cert
+  namespace: {{ $ns }}
+spec:
+  isCA: false
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  dnsNames:
+    - localhost
+    - {{ $org }}-peer{{ $i }}
+    - {{ $org }}-peer{{ $i }}.{{ $ns }}.svc.cluster.local
+    - {{ $org }}-peer{{ $i }}.{{ $domain }}
+    - {{ $org }}-peer-gateway-svc
+    - {{ $org }}-peer-gateway-svc.{{ $domain }}
+  ipAddresses:
+    - 127.0.0.1
+  secretName: {{ $org }}-peer{{ $i }}-tls-cert
+  issuerRef:
+    name: {{ $org }}-tls-cert-issuer
+{{- end }}
+{{- end }}
