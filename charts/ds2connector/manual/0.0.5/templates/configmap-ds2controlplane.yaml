@@ -38,8 +38,8 @@ data:
   EDC_HOSTNAME: ds2controlplane
   EDC_IAM_TRUSTED-ISSUER_ISSUER1_ID: did:web:identityhub.ds2.icelab.cloud:issuer
   EDC_IAM_TRUSTED_ISSUER_ISSUER1_SUPPORTEDTYPES: MembershipCredential
-  DS2_CREDENTIALS_CONSUMER_CREDENTIAL_TYPE: "ConsumerCredential"
-  DS2_CREDENTIALS_CONSUMER_CREDENTIAL_CLAIM_MEMBER: "member"
+  DS2_CREDENTIALS_CONSUMER_CREDENTIAL_TYPE: "DataspaceCredential"
+  DS2_CREDENTIALS_CONSUMER_CREDENTIAL_CLAIM_MEMBER: "dataspace"
   DS2_IDENTITYHUB_URL: http://{{ .Values.ds2identityhub.app.name }}:7082/api/credentials
   DS2_IDENTITYHUB_API_KEY: "c3VwZXItdXNlcg==.c3VwZXItc2VjcmV0LWtleQo="
   EDC_CONTROLPLANE_DRM_MONITOR_ENABLED: "{{ .Values.extensions.drm.enabled }}"
