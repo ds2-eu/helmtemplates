@@ -7,5 +7,5 @@ metadata:
 data:
   init.sql: |
     CREATE USER ds2connector WITH ENCRYPTED PASSWORD 'ds2connector' SUPERUSER;
-    CREATE DATABASE {{ .Values.app.organisationId }};
+    CREATE DATABASE "{{ .Values.app.organisationId }}";
 {{- end }}
