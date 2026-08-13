@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.ds2identityhub.app.name }} 
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.ds2identityhub.app.name }}  
+    service: {{ .Values.ds2identityhub.app.name }} 
+spec:
+  ports:
+  - port: 8080
+    name: http
+    targetPort: 8080
+  - port: 7082
+    name: credentials
+    targetPort: 7082
+  - port: 7081
+    name: identity
+    targetPort: 7081
+  - port: 7083
+    name: did
+    targetPort: 7083
+  - port: 7086
+    name: sts
+    targetPort: 7086
+  - port: 1044
+    name: undefined
+    targetPort: 1044
+  type: ClusterIP
+  selector:
+    app: {{ .Values.ds2identityhub.app.name }}
+
