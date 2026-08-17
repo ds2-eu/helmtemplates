@@ -1,0 +1,63 @@
+{{- if .Values.ds2identityhub.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.ds2identityhub.app.name }}-ingress 
+  namespace: {{ .Release.Namespace }}
+{{- with .Values.ds2identityhub.ingress.annotations }}
+  annotations:
+    # use the shared ingress-nginx
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - {{ template "ds2identityhubhostURL" . }}
+  rules:
+  - host: {{ template "ds2identityhubhostURL" . }}
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.ds2identityhub.app.name }} 
+            port:
+              number: {{ .Values.ds2identityhub.app.port }}
+      - path: /api/credentials
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.ds2identityhub.app.name }}
+            port:
+              number: 7082
+      - path: /api/identity
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.ds2identityhub.app.name }}
+            port:
+              number: 7081
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.ds2identityhub.app.name }}
+            port:
+              number: 7083
+      - path: /api/sts
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.ds2identityhub.app.name }}
+            port:
+              number: 7086
+      - path: /undefined
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.ds2identityhub.app.name }}
+            port:
+              number: 1044
+{{- end }}
