@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "ds2connector.name" -}}
+{{- define "ds2containerisation.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -10,7 +10,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "ds2connector.fullname" -}}
+{{- define "ds2containerisation.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +26,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "ds2connector.chart" -}}
+{{- define "ds2containerisation.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "ds2connector.labels" -}}
-helm.sh/chart: {{ include "ds2connector.chart" . }}
-{{ include "ds2connector.selectorLabels" . }}
+{{- define "ds2containerisation.labels" -}}
+helm.sh/chart: {{ include "ds2containerisation.chart" . }}
+{{ include "ds2containerisation.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -45,17 +45,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "ds2connector.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "ds2connector.name" . }}
+{{- define "ds2containerisation.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "ds2containerisation.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "ds2connector.serviceAccountName" -}}
+{{- define "ds2containerisation.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "ds2connector.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "ds2containerisation.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
@@ -91,38 +91,12 @@ Added to get the platform configuration values
 {{- (printf "{\"auths\": {\"%s\": {\"username\":\"%s\",\"password\":\"%s\",\"auth\": \"%s\"}}}" (printf "%s" $regurl) (printf "%s" $username) (printf "%s" $token) (printf "%s:%s" $username $token | b64enc)) | b64enc }}
 {{- end }}
 
-{{- define "ds2identityhubhostURL" -}}
+{{- define "hostURL" -}}
 {{- $domain:= ( include "domain" . ) }}
-{{- (printf "%s.%s" .Values.ds2identityhub.app.name $domain) }}
+{{- (printf "%s.%s" .Values.app.name $domain) }}
 {{- end }}
 
-{{- define "ds2identityhubimageURL" -}}
+{{- define "imageURL" -}}
 {{- $regurl:= ( include "regurl" . ) }}
-{{- (printf "%s/ds2-eu/mkt-%s/%s:%s" $regurl .Values.module.name .Values.ds2identityhub.image.name .Values.ds2identityhub.image.tag) }}
+{{- (printf "%s/ds2-eu/mkt-%s/%s:%s" $regurl .Values.module.name .Values.image.name .Values.image.tag) }}
 {{- end }}
-
-{{- define "ds2controlplanehostURL" -}}
-{{- $domain:= ( include "domain" . ) }}
-{{- (printf "%s.%s" .Values.ds2controlplane.app.name $domain) }}
-{{- end }}
-
-{{- define "ds2controlplaneimageURL" -}}
-{{- $regurl:= ( include "regurl" . ) }}
-{{- (printf "%s/ds2-eu/mkt-%s/%s:%s" $regurl .Values.module.name .Values.ds2controlplane.image.name .Values.ds2controlplane.image.tag) }}
-{{- end }}
-
-{{- define "ds2dataplanehostURL" -}}
-{{- $domain:= ( include "domain" . ) }}
-{{- (printf "%s.%s" .Values.ds2dataplane.app.name $domain) }}
-{{- end }}
-
-{{- define "ds2dataplaneimageURL" -}}
-{{- $regurl:= ( include "regurl" . ) }}
-{{- (printf "%s/ds2-eu/mkt-%s/%s:%s" $regurl .Values.module.name .Values.ds2dataplane.image.name .Values.ds2dataplane.image.tag) }}
-{{- end }}
-
-{{- define "ds2identityhubdid" -}}
-{{- $ds2identityhubhostURL:= ( include "ds2identityhubhostURL" . ) }}
-{{- (printf "did:web:%s:%s" $ds2identityhubhostURL .Values.app.organisationId) }}
-{{- end }}
-
