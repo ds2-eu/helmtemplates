@@ -6,6 +6,8 @@
 app:
   name: ds2connector
   organisationId: idtb
+module:
+  name: ds2connector
 
 ####  POSTGRES ####
 postgres:
