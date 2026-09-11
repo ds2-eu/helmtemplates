@@ -377,7 +377,7 @@ spec:
               mountPath: /certs
       containers:
         - name: channel-bootstrap
-          image: {{ include "drm.imageURL" (dict "ctx" $ "image" $.Values.images.fabricTools) }}
+          image: {{ include "drm.manualimageURL" (dict "ctx" $ "image" $.Values.images.fabricTools) }}
           command: ["/bin/sh", "/scripts/channel-bootstrap.sh"]
           volumeMounts:
             - name: scripts
