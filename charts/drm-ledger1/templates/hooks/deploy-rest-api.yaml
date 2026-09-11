@@ -163,7 +163,7 @@ spec:
       {{- include "drm.imagePullSecrets" $ | nindent 6 }}
       containers:
         - name: deploy-rest-api
-          image: {{ include "drm.imageURL" (dict "ctx" $ "image" $.Values.images.kubectl) }}
+          image: {{ include "drm.manualimageURL" (dict "ctx" $ "image" $.Values.images.kubectl) }}
           command: ["/bin/sh", "/scripts/deploy-rest-api.sh"]
           volumeMounts:
             - name: scripts
