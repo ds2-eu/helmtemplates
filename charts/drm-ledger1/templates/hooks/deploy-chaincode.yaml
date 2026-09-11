@@ -183,7 +183,7 @@ spec:
       {{- include "drm.imagePullSecrets" $ | nindent 6 }}
       containers:
         - name: deploy-cc
-          image: {{ include "drm.imageURL" (dict "ctx" $ "image" $.Values.images.kubectl) }}
+          image: {{ include "drm.manualimageURL" (dict "ctx" $ "image" $.Values.images.kubectl) }}
           command: ["/bin/sh", "/scripts/deploy-chaincode.sh"]
           volumeMounts:
             - name: scripts
