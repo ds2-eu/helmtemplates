@@ -190,7 +190,7 @@ spec:
       {{- include "drm.imagePullSecrets" $ | nindent 6 }}
       containers:
         - name: enroll
-          image: {{ include "drm.imageURL" (dict "ctx" $ "image" $.Values.images.kubectl) }}
+          image: {{ include "drm.manualimageURL" (dict "ctx" $ "image" $.Values.images.kubectl) }}
           command: ["/bin/sh", "/scripts/enroll.sh"]
           volumeMounts:
             - name: scripts
