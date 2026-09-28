@@ -1,0 +1,160 @@
+{{- $ns := include "drm.namespace" . -}}
+{{- $domain := include "drm.domain" . -}}
+# ============================================================================
+# Orderer ConfigMaps, Deployments, Services, Ingresses (orderer1, orderer2, orderer3)
+# ============================================================================
+{{- range $i := list 1 2 3 }}
+{{- $name := printf "org0-orderer%d" (int $i) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-env
+  namespace: {{ $ns }}
+data:
+  FABRIC_CFG_PATH: /var/hyperledger/fabric/config
+  FABRIC_LOGGING_SPEC: INFO
+  ORDERER_GENERAL_LISTENADDRESS: 0.0.0.0
+  ORDERER_GENERAL_LISTENPORT: "6050"
+  ORDERER_GENERAL_LOCALMSPID: OrdererMSP
+  ORDERER_GENERAL_LOCALMSPDIR: /var/hyperledger/fabric/organizations/ordererOrganizations/org0.example.com/orderers/{{ $name }}.org0.example.com/msp
+  ORDERER_GENERAL_TLS_ENABLED: "true"
+  ORDERER_GENERAL_TLS_CERTIFICATE: /var/hyperledger/fabric/config/tls/tls.crt
+  ORDERER_GENERAL_TLS_ROOTCAS: /var/hyperledger/fabric/config/tls/ca.crt
+  ORDERER_GENERAL_TLS_PRIVATEKEY: /var/hyperledger/fabric/config/tls/tls.key
+  ORDERER_GENERAL_BOOTSTRAPMETHOD: none
+  ORDERER_ADMIN_TLS_ENABLED: "true"
+  ORDERER_ADMIN_TLS_CERTIFICATE: /var/hyperledger/fabric/config/tls/tls.crt
+  ORDERER_ADMIN_TLS_ROOTCAS: /var/hyperledger/fabric/config/tls/ca.crt
+  ORDERER_ADMIN_TLS_PRIVATEKEY: /var/hyperledger/fabric/config/tls/tls.key
+  ORDERER_ADMIN_TLS_CLIENTROOTCAS: "[/var/hyperledger/fabric/organizations/ordererOrganizations/org0.example.com/orderers/{{ $name }}.org0.example.com/msp/cacerts/org0-ca.pem]"
+  ORDERER_FILELEDGER_LOCATION: /var/hyperledger/fabric/data/orderer{{ $i }}
+  ORDERER_CONSENSUS_WALDIR: /var/hyperledger/fabric/data/orderer{{ $i }}/etcdraft/wal
+  ORDERER_CONSENSUS_SNAPDIR: /var/hyperledger/fabric/data/orderer{{ $i }}/etcdraft/wal
+  ORDERER_OPERATIONS_LISTENADDRESS: 0.0.0.0:8443
+  ORDERER_ADMIN_LISTENADDRESS: 0.0.0.0:9443
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+    spec:
+      {{- include "drm.imagePullSecrets" $ | nindent 6 }}
+      initContainers:
+        - name: wait-for-msp
+          image: {{ include "drm.manualimageURL" (dict "ctx" $ "image" $.Values.images.busybox) }}
+          imagePullPolicy: {{ $.Values.images.busybox.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              MSP_DIR="/var/hyperledger/fabric/organizations/ordererOrganizations/org0.example.com/orderers/{{ $name }}.org0.example.com/msp/signcerts"
+              echo "Waiting for MSP at ${MSP_DIR}..."
+              until [ -d "${MSP_DIR}" ] && [ "$(ls -A ${MSP_DIR} 2>/dev/null)" ]; do
+                sleep 5
+              done
+              echo "MSP found, starting orderer"
+          volumeMounts:
+            - name: fabric-volume
+              mountPath: /var/hyperledger
+      containers:
+        - name: main
+          image: {{ include "drm.manualimageURL" (dict "ctx" $ "image" $.Values.images.fabricOrderer) }}
+          imagePullPolicy: {{ $.Values.images.fabricOrderer.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ $name }}-env
+          ports:
+            - containerPort: 6050
+            - containerPort: 8443
+            - containerPort: 9443
+          volumeMounts:
+            - name: fabric-volume
+              mountPath: /var/hyperledger
+            - name: fabric-config
+              mountPath: /var/hyperledger/fabric/config
+            - name: tls-cert-volume
+              mountPath: /var/hyperledger/fabric/config/tls
+              readOnly: true
+      volumes:
+        - name: fabric-volume
+          persistentVolumeClaim:
+            claimName: fabric-org0
+        - name: fabric-config
+          configMap:
+            name: org0-config
+        - name: tls-cert-volume
+          secret:
+            secretName: {{ $name }}-tls-cert
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+spec:
+  ports:
+    - name: general
+      port: 6050
+      protocol: TCP
+    - name: operations
+      port: 8443
+      protocol: TCP
+    - name: admin
+      port: 9443
+      protocol: TCP
+  selector:
+    app: {{ $name }}
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: 60s
+    nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+  labels:
+    app: {{ $name }}
+  name: {{ $name }}
+  namespace: {{ $ns }}
+spec:
+  {{- include "drm.ingressClass" $ | nindent 2 }}
+  rules:
+    - host: {{ $name }}.{{ $domain }}
+      http:
+        paths:
+          - backend:
+              service:
+                name: {{ $name }}
+                port:
+                  name: general
+            path: /
+            pathType: ImplementationSpecific
+    - host: {{ $name }}-admin.{{ $domain }}
+      http:
+        paths:
+          - backend:
+              service:
+                name: {{ $name }}
+                port:
+                  name: admin
+            path: /
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - {{ $name }}.{{ $domain }}
+    - hosts:
+        - {{ $name }}-admin.{{ $domain }}
+{{- end }}

@@ -1,0 +1,201 @@
+{{- $ns := include "drm.namespace" . -}}
+{{- $domain := include "drm.domain" . -}}
+# ============================================================================
+# Peer ConfigMaps, Deployments (peer + CouchDB), Services, Ingresses
+# ============================================================================
+{{- range $org := list "org1" "org2" }}
+{{- $mspId := printf "%s%sMSP" (upper (substr 0 1 $org)) (substr 1 (len $org) $org) }}
+{{- range $i := list 1 2 }}
+{{- $peer := printf "%s-peer%d" $org (int $i) }}
+{{- $peerNoDash := printf "%speer%d" $org (int $i) }}
+{{- $otherPeer := printf "%s-peer%d" $org (ternary 2 1 (eq (int $i) 1)) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $peer }}-config
+  namespace: {{ $ns }}
+data:
+  FABRIC_CFG_PATH: /var/hyperledger/fabric/config
+  FABRIC_LOGGING_SPEC: "debug:cauthdsl,policies,msp,grpc,peer.gossip.mcs,gossip,leveldbhelper=info"
+  CORE_PEER_TLS_ENABLED: "true"
+  CORE_PEER_TLS_CERT_FILE: /var/hyperledger/fabric/config/tls/tls.crt
+  CORE_PEER_TLS_KEY_FILE: /var/hyperledger/fabric/config/tls/tls.key
+  CORE_PEER_TLS_ROOTCERT_FILE: /var/hyperledger/fabric/config/tls/ca.crt
+  CORE_PEER_ID: {{ $peer }}.{{ $org }}.example.com
+  CORE_PEER_ADDRESS: {{ $peer }}:7051
+  CORE_PEER_LISTENADDRESS: 0.0.0.0:7051
+  CORE_PEER_CHAINCODEADDRESS: {{ $peer }}:7052
+  CORE_PEER_CHAINCODELISTENADDRESS: 0.0.0.0:7052
+  CORE_PEER_GOSSIP_BOOTSTRAP: {{ $otherPeer }}:7051
+  CORE_PEER_GOSSIP_EXTERNALENDPOINT: {{ $peer }}.{{ $ns }}.svc.cluster.local:7051
+  CORE_PEER_LOCALMSPID: {{ $mspId }}
+  CORE_PEER_MSPCONFIGPATH: /var/hyperledger/fabric/organizations/peerOrganizations/{{ $org }}.example.com/peers/{{ $peer }}.{{ $org }}.example.com/msp
+  CORE_OPERATIONS_LISTENADDRESS: 0.0.0.0:9443
+  CORE_PEER_FILESYSTEMPATH: /var/hyperledger/fabric/data/{{ $peer }}.{{ $org }}.example.com
+  CORE_LEDGER_SNAPSHOTS_ROOTDIR: /var/hyperledger/fabric/data/{{ $peer }}.{{ $org }}.example.com/snapshots
+  CHAINCODE_AS_A_SERVICE_BUILDER_CONFIG: '{"peername":"{{ $peerNoDash }}"}'
+  FABRIC_K8S_BUILDER_OBJECT_NAME_PREFIX: {{ $peer }}-cc
+  CORE_LEDGER_STATE_STATEDATABASE: CouchDB
+  CORE_LEDGER_STATE_COUCHDBCONFIG_MAXRETRIESONSTARTUP: "20"
+  CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS: localhost:5984
+  CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME: {{ $.Values.couchdb.user }}
+  CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD: {{ $.Values.couchdb.password }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $peer }}
+  namespace: {{ $ns }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ $peer }}
+  template:
+    metadata:
+      labels:
+        app: {{ $peer }}
+        org: {{ $org }}
+    spec:
+      {{- include "drm.imagePullSecrets" $ | nindent 6 }}
+      initContainers:
+        - name: wait-for-msp
+          image: {{ include "drm.manualimageURL" (dict "ctx" $ "image" $.Values.images.busybox) }}
+          imagePullPolicy: {{ $.Values.images.busybox.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              MSP_DIR="/var/hyperledger/fabric/organizations/peerOrganizations/{{ $org }}.example.com/peers/{{ $peer }}.{{ $org }}.example.com/msp/signcerts"
+              echo "Waiting for MSP at ${MSP_DIR}..."
+              until [ -d "${MSP_DIR}" ] && [ "$(ls -A ${MSP_DIR} 2>/dev/null)" ]; do
+                sleep 5
+              done
+              echo "MSP found, starting peer"
+          volumeMounts:
+            - name: fabric-volume
+              mountPath: /var/hyperledger
+      containers:
+        - name: main
+          image: {{ include "drm.manualimageURL" (dict "ctx" $ "image" $.Values.images.fabricPeer) }}
+          imagePullPolicy: {{ $.Values.images.fabricPeer.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ $peer }}-config
+          ports:
+            - containerPort: 7051
+            - containerPort: 7052
+            - containerPort: 9443
+          volumeMounts:
+            - name: fabric-volume
+              mountPath: /var/hyperledger
+            - name: fabric-config
+              mountPath: /var/hyperledger/fabric/config
+            - name: tls-cert-volume
+              mountPath: /var/hyperledger/fabric/config/tls
+              readOnly: true
+        - name: couchdb
+          image: {{ include "drm.manualimageURL" (dict "ctx" $ "image" $.Values.images.couchdb) }}
+          imagePullPolicy: {{ $.Values.images.couchdb.pullPolicy }}
+          env:
+            - name: COUCHDB_USER
+              value: {{ $.Values.couchdb.user | quote }}
+            - name: COUCHDB_PASSWORD
+              value: {{ $.Values.couchdb.password | quote }}
+          ports:
+            - containerPort: 5984
+      volumes:
+        - name: fabric-volume
+          persistentVolumeClaim:
+            claimName: fabric-{{ $org }}
+        - name: fabric-config
+          configMap:
+            name: {{ $org }}-config
+        - name: tls-cert-volume
+          secret:
+            secretName: {{ $peer }}-tls-cert
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $peer }}
+  namespace: {{ $ns }}
+spec:
+  ports:
+    - name: grpc
+      port: 7051
+      protocol: TCP
+    - name: chaincode
+      port: 7052
+      protocol: TCP
+    - name: operations
+      port: 9443
+      protocol: TCP
+  selector:
+    app: {{ $peer }}
+
+{{- if eq (int $i) 1 }}
+# Gateway service (load-balances across all peers in org)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $org }}-peer-gateway-svc
+  namespace: {{ $ns }}
+spec:
+  ports:
+    - name: grpc
+      port: 7051
+      protocol: TCP
+  selector:
+    org: {{ $org }}
+{{- end }}
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: 60s
+    nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+  labels:
+    app: {{ $peer }}
+  name: {{ $peer }}
+  namespace: {{ $ns }}
+spec:
+  {{- include "drm.ingressClass" $ | nindent 2 }}
+  rules:
+    - host: {{ $peer }}.{{ $domain }}
+      http:
+        paths:
+          - backend:
+              service:
+                name: {{ $peer }}
+                port:
+                  name: grpc
+            path: /
+            pathType: ImplementationSpecific
+{{- if eq (int $i) 1 }}
+    - host: {{ $org }}-peer-gateway-svc.{{ $domain }}
+      http:
+        paths:
+          - backend:
+              service:
+                name: {{ $org }}-peer-gateway-svc
+                port:
+                  name: grpc
+            path: /
+            pathType: ImplementationSpecific
+{{- end }}
+  tls:
+    - hosts:
+        - {{ $peer }}.{{ $domain }}
+{{- if eq (int $i) 1 }}
+    - hosts:
+        - {{ $org }}-peer-gateway-svc.{{ $domain }}
+{{- end }}
+{{- end }}
+{{- end }}
