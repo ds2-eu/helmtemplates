@@ -122,9 +122,9 @@ persistence:
   enabled: true
   storage: 1Gi
   accessmode: ReadWriteOnce
-  reclaimpolicy: Retain
+  reclaimpolicy: Delete
   # Host path base directory - one sub-directory per organisation is created
-  path: /mnt/drm
+  path: /idt/drm
 
 # DRM UI Backend (ilab-ds2-drm-ui-backend)
 drmUiBackend:
