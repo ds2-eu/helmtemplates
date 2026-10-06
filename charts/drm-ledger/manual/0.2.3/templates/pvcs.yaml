@@ -1,0 +1,41 @@
+{{- if .Values.persistence.enabled }}
+{{- $ns := include "drm.namespace" . -}}
+# ============================================================================
+# Persistent storage - one PV + PVC pair per organisation, bound to each other
+# through a release-specific storage class (no dynamic provisioning required)
+# ============================================================================
+{{- range $org := list "org0" "org1" "org2" }}
+{{- $sc := include "drm.storageClassName" (dict "ctx" $ "org" $org) }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: fabric-{{ $org }}-pv
+  labels:
+    type: local
+spec:
+  storageClassName: {{ $sc }}
+  capacity:
+    storage: {{ $.Values.persistence.storage }}
+  accessModes:
+    - {{ $.Values.persistence.accessmode }}
+  persistentVolumeReclaimPolicy: {{ $.Values.persistence.reclaimpolicy }}
+  hostPath:
+    path: {{ printf "%s/%s/%s" $.Values.persistence.path $ns $org | quote }}
+    type: DirectoryOrCreate
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fabric-{{ $org }}
+  namespace: {{ $ns }}
+spec:
+  storageClassName: {{ $sc }}
+  accessModes:
+    - {{ $.Values.persistence.accessmode }}
+  resources:
+    requests:
+      storage: {{ $.Values.persistence.storage }}
+{{- end }}
+{{- end }}
