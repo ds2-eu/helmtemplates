@@ -1,0 +1,405 @@
+{{- $ns := include "drm.namespace" . -}}
+# ============================================================================
+# Hook: Bootstrap Channel - Extracts certs, creates channel, joins all nodes
+# Uses init container (kubectl) to extract certs, main container (fabric-tools)
+# ============================================================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bootstrap-configtx
+  namespace: {{ $ns }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "4"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+data:
+  configtx.yaml: |
+    Organizations:
+      - &OrdererOrg
+        Name: OrdererOrg
+        ID: OrdererMSP
+        MSPDir: ./channel-msp/ordererOrganizations/org0/msp
+        Policies:
+          Readers:
+            Type: Signature
+            Rule: "OR('OrdererMSP.member')"
+          Writers:
+            Type: Signature
+            Rule: "OR('OrdererMSP.member')"
+          Admins:
+            Type: Signature
+            Rule: "OR('OrdererMSP.admin')"
+        OrdererEndpoints:
+          - org0-orderer1.{{ $ns }}.svc.cluster.local:6050
+          - org0-orderer2.{{ $ns }}.svc.cluster.local:6050
+          - org0-orderer3.{{ $ns }}.svc.cluster.local:6050
+      - &Org1
+        Name: Org1MSP
+        ID: Org1MSP
+        MSPDir: ./channel-msp/peerOrganizations/org1/msp
+        Policies:
+          Readers:
+            Type: Signature
+            Rule: "OR('Org1MSP.admin', 'Org1MSP.peer', 'Org1MSP.client')"
+          Writers:
+            Type: Signature
+            Rule: "OR('Org1MSP.admin', 'Org1MSP.client')"
+          Admins:
+            Type: Signature
+            Rule: "OR('Org1MSP.admin')"
+          Endorsement:
+            Type: Signature
+            Rule: "OR('Org1MSP.peer')"
+        AnchorPeers:
+          - Host: org1-peer1.{{ $ns }}.svc.cluster.local
+            Port: 7051
+      - &Org2
+        Name: Org2MSP
+        ID: Org2MSP
+        MSPDir: ./channel-msp/peerOrganizations/org2/msp
+        Policies:
+          Readers:
+            Type: Signature
+            Rule: "OR('Org2MSP.admin', 'Org2MSP.peer', 'Org2MSP.client')"
+          Writers:
+            Type: Signature
+            Rule: "OR('Org2MSP.admin', 'Org2MSP.client')"
+          Admins:
+            Type: Signature
+            Rule: "OR('Org2MSP.admin')"
+          Endorsement:
+            Type: Signature
+            Rule: "OR('Org2MSP.peer')"
+        AnchorPeers:
+          - Host: org2-peer1.{{ $ns }}.svc.cluster.local
+            Port: 7051
+    Capabilities:
+      Channel: &ChannelCapabilities
+        V2_0: true
+      Orderer: &OrdererCapabilities
+        V2_0: true
+      Application: &ApplicationCapabilities
+        V2_0: true
+    Application: &ApplicationDefaults
+      Organizations:
+      Policies:
+        Readers:
+          Type: ImplicitMeta
+          Rule: "ANY Readers"
+        Writers:
+          Type: ImplicitMeta
+          Rule: "ANY Writers"
+        Admins:
+          Type: ImplicitMeta
+          Rule: "MAJORITY Admins"
+        LifecycleEndorsement:
+          Type: Signature
+          Rule: "OR('Org1MSP.peer','Org2MSP.peer')"
+        Endorsement:
+          Type: Signature
+          Rule: "OR('Org1MSP.peer','Org2MSP.peer')"
+      Capabilities:
+        <<: *ApplicationCapabilities
+    Orderer: &OrdererDefaults
+      OrdererType: etcdraft
+      EtcdRaft:
+        Consenters:
+          - Host: org0-orderer1
+            Port: 6050
+            ClientTLSCert: ./channel-msp/ordererOrganizations/org0/orderers/org0-orderer1/tls/signcerts/tls-cert.pem
+            ServerTLSCert: ./channel-msp/ordererOrganizations/org0/orderers/org0-orderer1/tls/signcerts/tls-cert.pem
+          - Host: org0-orderer2
+            Port: 6050
+            ClientTLSCert: ./channel-msp/ordererOrganizations/org0/orderers/org0-orderer2/tls/signcerts/tls-cert.pem
+            ServerTLSCert: ./channel-msp/ordererOrganizations/org0/orderers/org0-orderer2/tls/signcerts/tls-cert.pem
+          - Host: org0-orderer3
+            Port: 6050
+            ClientTLSCert: ./channel-msp/ordererOrganizations/org0/orderers/org0-orderer3/tls/signcerts/tls-cert.pem
+            ServerTLSCert: ./channel-msp/ordererOrganizations/org0/orderers/org0-orderer3/tls/signcerts/tls-cert.pem
+        Options:
+          TickInterval: 2500ms
+          ElectionTick: 5
+          HeartbeatTick: 1
+          MaxInflightBlocks: 5
+          SnapshotIntervalSize: 16 MB
+      BatchTimeout: 2s
+      BatchSize:
+        MaxMessageCount: 10
+        AbsoluteMaxBytes: 99 MB
+        PreferredMaxBytes: 512 KB
+      Organizations:
+      Policies:
+        Readers:
+          Type: ImplicitMeta
+          Rule: "ANY Readers"
+        Writers:
+          Type: ImplicitMeta
+          Rule: "ANY Writers"
+        Admins:
+          Type: ImplicitMeta
+          Rule: "MAJORITY Admins"
+        BlockValidation:
+          Type: ImplicitMeta
+          Rule: "ANY Writers"
+    Channel: &ChannelDefaults
+      Policies:
+        Readers:
+          Type: ImplicitMeta
+          Rule: "ANY Readers"
+        Writers:
+          Type: ImplicitMeta
+          Rule: "ANY Writers"
+        Admins:
+          Type: ImplicitMeta
+          Rule: "MAJORITY Admins"
+      Capabilities:
+        <<: *ChannelCapabilities
+    Profiles:
+      TwoOrgsApplicationGenesis:
+        <<: *ChannelDefaults
+        Orderer:
+          <<: *OrdererDefaults
+          Organizations:
+            - *OrdererOrg
+          Capabilities: *OrdererCapabilities
+        Application:
+          <<: *ApplicationDefaults
+          Organizations:
+            - *Org1
+            - *Org2
+          Capabilities: *ApplicationCapabilities
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bootstrap-channel-script
+  namespace: {{ $ns }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "4"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+data:
+  extract-certs.sh: |
+    #!/bin/sh
+    set -e
+    NAMESPACE="{{ $ns }}"
+    CERTS="/certs"
+    mkdir -p "${CERTS}"
+
+    echo "=== Extracting certificates ==="
+
+    # CA signing certs (from admin MSPs on PV via CA pods)
+    kubectl -n "${NAMESPACE}" exec "deploy/org0-ca" -- sh -c 'cat /var/hyperledger/fabric/organizations/ordererOrganizations/org0.example.com/users/org0admin/msp/cacerts/*.pem' > "${CERTS}/org0-ca-signcert.pem"
+    kubectl -n "${NAMESPACE}" exec "deploy/org1-ca" -- sh -c 'cat /var/hyperledger/fabric/organizations/peerOrganizations/org1.example.com/users/org1admin/msp/cacerts/*.pem' > "${CERTS}/org1-ca-signcert.pem"
+    kubectl -n "${NAMESPACE}" exec "deploy/org2-ca" -- sh -c 'cat /var/hyperledger/fabric/organizations/peerOrganizations/org2.example.com/users/org2admin/msp/cacerts/*.pem' > "${CERTS}/org2-ca-signcert.pem"
+
+    # TLS CA certs (from cert-manager secrets)
+    for org in org0 org1 org2; do
+      kubectl -n "${NAMESPACE}" get secret "${org}-ca-tls-cert" -o jsonpath='{.data.ca\.crt}' | base64 -d > "${CERTS}/${org}-tlsca-cert.pem"
+    done
+
+    # Orderer TLS certs
+    for i in 1 2 3; do
+      kubectl -n "${NAMESPACE}" get secret "org0-orderer${i}-tls-cert" -o jsonpath='{.data.tls\.crt}' | base64 -d > "${CERTS}/org0-orderer${i}-tls-cert.pem"
+    done
+
+    # Admin certs and keys
+    kubectl -n "${NAMESPACE}" exec "deploy/org0-ca" -- cat /var/hyperledger/fabric/organizations/ordererOrganizations/org0.example.com/users/org0admin/msp/signcerts/cert.pem > "${CERTS}/org0admin-cert.pem"
+    kubectl -n "${NAMESPACE}" exec "deploy/org0-ca" -- cat /var/hyperledger/fabric/organizations/ordererOrganizations/org0.example.com/users/org0admin/msp/keystore/key.pem > "${CERTS}/org0admin-key.pem"
+
+    for org_num in 1 2; do
+      org="org${org_num}"
+      admin="${org}admin"
+      kubectl -n "${NAMESPACE}" exec "deploy/${org}-ca" -- cat /var/hyperledger/fabric/organizations/peerOrganizations/${org}.example.com/users/${admin}/msp/signcerts/cert.pem > "${CERTS}/${admin}-cert.pem"
+      kubectl -n "${NAMESPACE}" exec "deploy/${org}-ca" -- cat /var/hyperledger/fabric/organizations/peerOrganizations/${org}.example.com/users/${admin}/msp/keystore/key.pem > "${CERTS}/${admin}-key.pem"
+    done
+
+    echo "=== Certificates extracted to ${CERTS} ==="
+
+  channel-bootstrap.sh: |
+    #!/bin/sh
+    set -e
+
+    CHANNEL_NAME="{{ .Values.channel.name }}"
+    CERTS="/certs"
+    WORK="/work"
+
+    echo "=== Building channel MSP ==="
+
+    # Orderer org MSP
+    ORG0_MSP="${WORK}/channel-msp/ordererOrganizations/org0/msp"
+    mkdir -p "${ORG0_MSP}/cacerts" "${ORG0_MSP}/tlscacerts"
+    cp "${CERTS}/org0-ca-signcert.pem" "${ORG0_MSP}/cacerts/ca-signcert.pem"
+    cp "${CERTS}/org0-tlsca-cert.pem" "${ORG0_MSP}/tlscacerts/tlsca-signcert.pem"
+    cat > "${ORG0_MSP}/config.yaml" <<'EOF'
+    NodeOUs:
+      Enable: true
+      ClientOUIdentifier:
+        Certificate: cacerts/ca-signcert.pem
+        OrganizationalUnitIdentifier: client
+      PeerOUIdentifier:
+        Certificate: cacerts/ca-signcert.pem
+        OrganizationalUnitIdentifier: peer
+      AdminOUIdentifier:
+        Certificate: cacerts/ca-signcert.pem
+        OrganizationalUnitIdentifier: admin
+      OrdererOUIdentifier:
+        Certificate: cacerts/ca-signcert.pem
+        OrganizationalUnitIdentifier: orderer
+    EOF
+
+    # Orderer TLS certs
+    for i in 1 2 3; do
+      OTLS="${WORK}/channel-msp/ordererOrganizations/org0/orderers/org0-orderer${i}/tls/signcerts"
+      mkdir -p "${OTLS}"
+      cp "${CERTS}/org0-orderer${i}-tls-cert.pem" "${OTLS}/tls-cert.pem"
+    done
+
+    # Peer org MSPs
+    for org in org1 org2; do
+      ORG_MSP="${WORK}/channel-msp/peerOrganizations/${org}/msp"
+      mkdir -p "${ORG_MSP}/cacerts" "${ORG_MSP}/tlscacerts"
+      cp "${CERTS}/${org}-ca-signcert.pem" "${ORG_MSP}/cacerts/ca-signcert.pem"
+      cp "${CERTS}/${org}-tlsca-cert.pem" "${ORG_MSP}/tlscacerts/tlsca-signcert.pem"
+      cat > "${ORG_MSP}/config.yaml" <<'EOF'
+    NodeOUs:
+      Enable: true
+      ClientOUIdentifier:
+        Certificate: cacerts/ca-signcert.pem
+        OrganizationalUnitIdentifier: client
+      PeerOUIdentifier:
+        Certificate: cacerts/ca-signcert.pem
+        OrganizationalUnitIdentifier: peer
+      AdminOUIdentifier:
+        Certificate: cacerts/ca-signcert.pem
+        OrganizationalUnitIdentifier: admin
+      OrdererOUIdentifier:
+        Certificate: cacerts/ca-signcert.pem
+        OrganizationalUnitIdentifier: orderer
+    EOF
+    done
+
+    echo "=== Generating genesis block ==="
+    cp /configtx/configtx.yaml "${WORK}/configtx.yaml"
+    FABRIC_CFG_PATH="${WORK}" configtxgen \
+      -profile TwoOrgsApplicationGenesis \
+      -channelID "${CHANNEL_NAME}" \
+      -outputBlock "${WORK}/genesis_block.pb"
+
+    echo "=== Joining orderers to channel ==="
+    ADMIN_CERT="${CERTS}/org0admin-cert.pem"
+    ADMIN_KEY="${CERTS}/org0admin-key.pem"
+
+    for i in 1 2 3; do
+      echo "  Joining org0-orderer${i}..."
+      osnadmin channel join \
+        --orderer-address "org0-orderer${i}:9443" \
+        --ca-file "${CERTS}/org0-orderer${i}-tls-cert.pem" \
+        --client-cert "${ADMIN_CERT}" \
+        --client-key "${ADMIN_KEY}" \
+        --channelID "${CHANNEL_NAME}" \
+        --config-block "${WORK}/genesis_block.pb"
+    done
+
+    echo "  Waiting for Raft leader election..."
+    sleep 10
+
+    echo "=== Joining peers to channel ==="
+    for org in org1 org2; do
+      MSP_ID="$(echo ${org} | sed 's/org/Org/')MSP"
+      TLS_ROOT="${CERTS}/${org}-tlsca-cert.pem"
+
+      ADMIN_MSP="${WORK}/${org}-admin-msp"
+      mkdir -p "${ADMIN_MSP}/signcerts" "${ADMIN_MSP}/keystore" "${ADMIN_MSP}/cacerts" "${ADMIN_MSP}/tlscacerts"
+      cp "${CERTS}/${org}admin-cert.pem" "${ADMIN_MSP}/signcerts/cert.pem"
+      cp "${CERTS}/${org}admin-key.pem" "${ADMIN_MSP}/keystore/key.pem"
+      cp "${CERTS}/${org}-ca-signcert.pem" "${ADMIN_MSP}/cacerts/ca-signcert.pem"
+      cp "${CERTS}/${org}-tlsca-cert.pem" "${ADMIN_MSP}/tlscacerts/tlsca-signcert.pem"
+      cat > "${ADMIN_MSP}/config.yaml" <<EOF2
+    NodeOUs:
+      Enable: true
+      ClientOUIdentifier:
+        Certificate: cacerts/ca-signcert.pem
+        OrganizationalUnitIdentifier: client
+      PeerOUIdentifier:
+        Certificate: cacerts/ca-signcert.pem
+        OrganizationalUnitIdentifier: peer
+      AdminOUIdentifier:
+        Certificate: cacerts/ca-signcert.pem
+        OrganizationalUnitIdentifier: admin
+      OrdererOUIdentifier:
+        Certificate: cacerts/ca-signcert.pem
+        OrganizationalUnitIdentifier: orderer
+    EOF2
+
+      for i in 1 2; do
+        echo "  Joining ${org}-peer${i}..."
+        CORE_PEER_ADDRESS="${org}-peer${i}:7051" \
+        CORE_PEER_MSPCONFIGPATH="${ADMIN_MSP}" \
+        CORE_PEER_TLS_ROOTCERT_FILE="${TLS_ROOT}" \
+        CORE_PEER_LOCALMSPID="${MSP_ID}" \
+        CORE_PEER_TLS_ENABLED="true" \
+          peer channel join --blockpath "${WORK}/genesis_block.pb"
+      done
+    done
+
+    echo "=== Channel bootstrap complete ==="
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: drm-bootstrap-channel
+  namespace: {{ $ns }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      serviceAccountName: drm-hook-sa
+      restartPolicy: Never
+      {{- include "drm.imagePullSecrets" $ | nindent 6 }}
+      initContainers:
+        - name: extract-certs
+          image: {{ include "drm.imageURL" (dict "ctx" $ "image" $.Values.images.kubectl) }}
+          command: ["/bin/sh", "/scripts/extract-certs.sh"]
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: certs
+              mountPath: /certs
+      containers:
+        - name: channel-bootstrap
+          image: {{ include "drm.imageURL" (dict "ctx" $ "image" $.Values.images.fabricTools) }}
+          command: ["/bin/sh", "/scripts/channel-bootstrap.sh"]
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: configtx
+              mountPath: /configtx
+              readOnly: true
+            - name: certs
+              mountPath: /certs
+              readOnly: true
+            - name: work
+              mountPath: /work
+      volumes:
+        - name: scripts
+          configMap:
+            name: bootstrap-channel-script
+            defaultMode: 0755
+        - name: configtx
+          configMap:
+            name: bootstrap-configtx
+        - name: certs
+          emptyDir: {}
+        - name: work
+          emptyDir: {}

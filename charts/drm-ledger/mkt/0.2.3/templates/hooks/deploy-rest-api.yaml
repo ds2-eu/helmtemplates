@@ -1,0 +1,176 @@
+{{- $ns := include "drm.namespace" . -}}
+# ============================================================================
+# Hook: Deploy REST API Config - Extract certs, create connection profiles,
+# create ConfigMap, scale up REST API deployment
+# ============================================================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: deploy-rest-api-script
+  namespace: {{ $ns }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "14"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+data:
+  deploy-rest-api.sh: |
+    #!/bin/sh
+    set -e
+
+    NAMESPACE="{{ $ns }}"
+
+    echo "=== DRM Ledger - REST API Configuration ==="
+
+    # Helper: convert PEM to single-line
+    one_line_pem() {
+      awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' "$1"
+    }
+
+    # Helper: generate connection profile JSON
+    generate_ccp() {
+      local org_num=$1
+      local peer_pem=$2
+      local ca_pem=$3
+      local pp=$(one_line_pem "${peer_pem}")
+      local cp=$(one_line_pem "${ca_pem}")
+
+      cat <<CCPEOF
+    {
+        "name": "${NAMESPACE}-org${org_num}",
+        "version": "1.0.0",
+        "client": {
+            "organization": "Org${org_num}",
+            "connection": {
+                "timeout": {
+                    "peer": {
+                        "endorser": "300"
+                    }
+                }
+            }
+        },
+        "organizations": {
+            "Org${org_num}": {
+                "mspid": "Org${org_num}MSP",
+                "peers": [
+                    "org${org_num}-peers"
+                ],
+                "certificateAuthorities": [
+                    "org${org_num}-ca"
+                ]
+            }
+        },
+        "peers": {
+            "org${org_num}-peers": {
+                "url": "grpcs://org${org_num}-peer1.${NAMESPACE}.svc.cluster.local:7051",
+                "tlsCACerts": {
+                    "pem": "${pp}"
+                },
+                "grpcOptions": {
+                    "ssl-target-name-override": "org${org_num}-peer1.${NAMESPACE}.svc.cluster.local",
+                    "hostnameOverride": "org${org_num}-peer1.${NAMESPACE}.svc.cluster.local"
+                }
+            }
+        },
+        "certificateAuthorities": {
+            "org${org_num}-ca": {
+                "url": "https://org${org_num}-ca:443",
+                "caName": "org${org_num}-ca",
+                "tlsCACerts": {
+                    "pem": ["${cp}"]
+                },
+                "httpOptions": {
+                    "verify": false
+                }
+            }
+        }
+    }
+    CCPEOF
+    }
+
+    TMPDIR=$(mktemp -d)
+
+    # --- Extract TLS CA certs ---
+    echo "  Extracting TLS CA certificates..."
+    for org_num in 1 2; do
+      kubectl -n "${NAMESPACE}" get secret "org${org_num}-ca-tls-cert" \
+        -o jsonpath='{.data.ca\.crt}' | base64 -d > "${TMPDIR}/org${org_num}-tlsca.pem"
+    done
+
+    # --- Extract admin certs and keys ---
+    echo "  Extracting admin certificates and keys..."
+    for org_num in 1 2; do
+      org="org${org_num}"
+      admin="${org}admin"
+      admin_msp="/var/hyperledger/fabric/organizations/peerOrganizations/${org}.example.com/users/${admin}/msp"
+      kubectl -n "${NAMESPACE}" exec "deploy/${org}-ca" -- cat "${admin_msp}/signcerts/cert.pem" > "${TMPDIR}/${admin}-cert.pem"
+      kubectl -n "${NAMESPACE}" exec "deploy/${org}-ca" -- cat "${admin_msp}/keystore/key.pem" > "${TMPDIR}/${admin}-key.pem"
+    done
+
+    # --- Generate connection profiles ---
+    echo "  Generating connection profiles..."
+    CCP_ORG1=$(generate_ccp 1 "${TMPDIR}/org1-tlsca.pem" "${TMPDIR}/org1-tlsca.pem")
+    CCP_ORG2=$(generate_ccp 2 "${TMPDIR}/org2-tlsca.pem" "${TMPDIR}/org2-tlsca.pem")
+
+    CERT_ORG1=$(cat "${TMPDIR}/org1admin-cert.pem")
+    KEY_ORG1=$(cat "${TMPDIR}/org1admin-key.pem")
+    CERT_ORG2=$(cat "${TMPDIR}/org2admin-cert.pem")
+    KEY_ORG2=$(cat "${TMPDIR}/org2admin-key.pem")
+
+    # --- Create the ConfigMap ---
+    echo "  Creating fabric-rest-sample-config ConfigMap..."
+    kubectl -n "${NAMESPACE}" create configmap fabric-rest-sample-config \
+      --from-literal=HLF_CONNECTION_PROFILE_ORG1="${CCP_ORG1}" \
+      --from-literal=HLF_CERTIFICATE_ORG1="${CERT_ORG1}" \
+      --from-literal=HLF_PRIVATE_KEY_ORG1="${KEY_ORG1}" \
+      --from-literal=HLF_CONNECTION_PROFILE_ORG2="${CCP_ORG2}" \
+      --from-literal=HLF_CERTIFICATE_ORG2="${CERT_ORG2}" \
+      --from-literal=HLF_PRIVATE_KEY_ORG2="${KEY_ORG2}" \
+      --dry-run=client -o yaml | kubectl apply -f -
+
+    # --- Scale up REST API ---
+    echo "  Scaling up REST API deployment..."
+    kubectl -n "${NAMESPACE}" scale deployment fabric-rest-sample --replicas=1
+
+    echo "  Waiting for REST API to be ready..."
+    kubectl -n "${NAMESPACE}" rollout status deploy/fabric-rest-sample --timeout=120s
+
+    # Cleanup
+    rm -rf "${TMPDIR}"
+
+    echo "=== REST API Deployment Complete ==="
+    echo "  Endpoint: http://fabric-rest-sample.{{ include "drm.domain" . }}"
+    echo "  Org1 API Key: {{ .Values.restApi.org1ApiKey }}"
+    echo "  Org2 API Key: {{ .Values.restApi.org2ApiKey }}"
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: drm-deploy-rest-api
+  namespace: {{ $ns }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "15"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      serviceAccountName: drm-hook-sa
+      restartPolicy: Never
+      {{- include "drm.imagePullSecrets" $ | nindent 6 }}
+      containers:
+        - name: deploy-rest-api
+          image: {{ include "drm.imageURL" (dict "ctx" $ "image" $.Values.images.kubectl) }}
+          command: ["/bin/sh", "/scripts/deploy-rest-api.sh"]
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+      volumes:
+        - name: scripts
+          configMap:
+            name: deploy-rest-api-script
+            defaultMode: 0755

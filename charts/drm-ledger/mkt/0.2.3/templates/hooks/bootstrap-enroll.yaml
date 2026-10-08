@@ -1,0 +1,203 @@
+{{- $ns := include "drm.namespace" . -}}
+# ============================================================================
+# Hook: Bootstrap Enroll - Enrolls all identities via kubectl exec into CA pods
+# ============================================================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bootstrap-enroll-script
+  namespace: {{ $ns }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+data:
+  enroll.sh: |
+    #!/bin/sh
+    set -e
+
+    NAMESPACE="{{ $ns }}"
+    RCAADMIN_USER="{{ .Values.caAdmin.user }}"
+    RCAADMIN_PASS="{{ .Values.caAdmin.password }}"
+
+    echo "=== Waiting for CAs to be ready ==="
+    for ca in org0-ca org1-ca org2-ca; do
+      echo "  Waiting for ${ca}..."
+      kubectl -n "${NAMESPACE}" rollout status "deploy/${ca}" --timeout=300s
+    done
+    echo "=== All CAs ready ==="
+
+    # Helper: run enrollment script inside a CA pod
+    enroll_org() {
+      local org=$1
+      local ca_name="${org}-ca"
+      local tls_cert="/var/hyperledger/fabric/config/tls/ca.crt"
+      local admin_msp="/tmp/bootstrap-admin-msp"
+      local org_base="/var/hyperledger/fabric/organizations"
+
+      echo "=== Enrolling identities for ${org} ==="
+
+      local script="set -e
+    export FABRIC_CA_CLIENT_HOME=/tmp/fabric-ca-client
+    export FABRIC_CA_CLIENT_TLS_CERTFILES=${tls_cert}
+
+    echo '--- Enrolling bootstrap admin ---'
+    fabric-ca-client enroll --url https://${RCAADMIN_USER}:${RCAADMIN_PASS}@localhost:443 --mspdir ${admin_msp}
+    "
+
+      if [ "$org" = "org0" ]; then
+        # Register & enroll orderers
+        for i in 1 2 3; do
+          local node="org0-orderer${i}"
+          script="${script}
+    echo '--- Registering ${node} ---'
+    fabric-ca-client register --id.name ${node} --id.secret ordererpw --id.type orderer --url https://localhost:443 --mspdir ${admin_msp} 2>/dev/null || echo '(may already be registered)'
+    echo '--- Enrolling ${node} ---'
+    fabric-ca-client enroll --url https://${node}:ordererpw@localhost:443 --csr.hosts ${node} --mspdir ${org_base}/ordererOrganizations/${org}.example.com/orderers/${node}.${org}.example.com/msp
+    mv ${org_base}/ordererOrganizations/${org}.example.com/orderers/${node}.${org}.example.com/msp/cacerts/*.pem ${org_base}/ordererOrganizations/${org}.example.com/orderers/${node}.${org}.example.com/msp/cacerts/${ca_name}.pem 2>/dev/null || true
+    cat > ${org_base}/ordererOrganizations/${org}.example.com/orderers/${node}.${org}.example.com/msp/config.yaml <<'NODEOU'
+    NodeOUs:
+      Enable: true
+      ClientOUIdentifier:
+        Certificate: cacerts/${ca_name}.pem
+        OrganizationalUnitIdentifier: client
+      PeerOUIdentifier:
+        Certificate: cacerts/${ca_name}.pem
+        OrganizationalUnitIdentifier: peer
+      AdminOUIdentifier:
+        Certificate: cacerts/${ca_name}.pem
+        OrganizationalUnitIdentifier: admin
+      OrdererOUIdentifier:
+        Certificate: cacerts/${ca_name}.pem
+        OrganizationalUnitIdentifier: orderer
+    NODEOU"
+        done
+
+        # Register & enroll org0 admin
+        script="${script}
+    echo '--- Registering org0admin ---'
+    fabric-ca-client register --id.name org0admin --id.secret org0adminpw --id.type admin --url https://localhost:443 --mspdir ${admin_msp} --id.attrs 'hf.Registrar.Roles=client,hf.Registrar.Attributes=*,hf.Revoker=true,hf.GenCRL=true,admin=true:ecert,abac.init=true:ecert' 2>/dev/null || echo '(may already be registered)'
+    echo '--- Enrolling org0admin ---'
+    fabric-ca-client enroll --url https://org0admin:org0adminpw@localhost:443 --mspdir ${org_base}/ordererOrganizations/${org}.example.com/users/org0admin/msp
+    mv ${org_base}/ordererOrganizations/${org}.example.com/users/org0admin/msp/keystore/*_sk ${org_base}/ordererOrganizations/${org}.example.com/users/org0admin/msp/keystore/key.pem 2>/dev/null || true
+    mv ${org_base}/ordererOrganizations/${org}.example.com/users/org0admin/msp/cacerts/*.pem ${org_base}/ordererOrganizations/${org}.example.com/users/org0admin/msp/cacerts/${ca_name}.pem 2>/dev/null || true
+    cat > ${org_base}/ordererOrganizations/${org}.example.com/users/org0admin/msp/config.yaml <<'NODEOU'
+    NodeOUs:
+      Enable: true
+      ClientOUIdentifier:
+        Certificate: cacerts/${ca_name}.pem
+        OrganizationalUnitIdentifier: client
+      PeerOUIdentifier:
+        Certificate: cacerts/${ca_name}.pem
+        OrganizationalUnitIdentifier: peer
+      AdminOUIdentifier:
+        Certificate: cacerts/${ca_name}.pem
+        OrganizationalUnitIdentifier: admin
+      OrdererOUIdentifier:
+        Certificate: cacerts/${ca_name}.pem
+        OrganizationalUnitIdentifier: orderer
+    NODEOU"
+      else
+        # Peer org
+        local admin_name="${org}admin"
+        local admin_pass="${org}adminpw"
+        for i in 1 2; do
+          local node="${org}-peer${i}"
+          script="${script}
+    echo '--- Registering ${node} ---'
+    fabric-ca-client register --id.name ${node} --id.secret peerpw --id.type peer --url https://localhost:443 --mspdir ${admin_msp} 2>/dev/null || echo '(may already be registered)'
+    echo '--- Enrolling ${node} ---'
+    fabric-ca-client enroll --url https://${node}:peerpw@localhost:443 --csr.hosts localhost,${node},${org}-peer-gateway-svc --mspdir ${org_base}/peerOrganizations/${org}.example.com/peers/${node}.${org}.example.com/msp
+    mv ${org_base}/peerOrganizations/${org}.example.com/peers/${node}.${org}.example.com/msp/cacerts/*.pem ${org_base}/peerOrganizations/${org}.example.com/peers/${node}.${org}.example.com/msp/cacerts/${ca_name}.pem 2>/dev/null || true
+    cat > ${org_base}/peerOrganizations/${org}.example.com/peers/${node}.${org}.example.com/msp/config.yaml <<'NODEOU'
+    NodeOUs:
+      Enable: true
+      ClientOUIdentifier:
+        Certificate: cacerts/${ca_name}.pem
+        OrganizationalUnitIdentifier: client
+      PeerOUIdentifier:
+        Certificate: cacerts/${ca_name}.pem
+        OrganizationalUnitIdentifier: peer
+      AdminOUIdentifier:
+        Certificate: cacerts/${ca_name}.pem
+        OrganizationalUnitIdentifier: admin
+      OrdererOUIdentifier:
+        Certificate: cacerts/${ca_name}.pem
+        OrganizationalUnitIdentifier: orderer
+    NODEOU"
+        done
+
+        script="${script}
+    echo '--- Registering ${admin_name} ---'
+    fabric-ca-client register --id.name ${admin_name} --id.secret ${admin_pass} --id.type admin --url https://localhost:443 --mspdir ${admin_msp} --id.attrs 'hf.Registrar.Roles=client,hf.Registrar.Attributes=*,hf.Revoker=true,hf.GenCRL=true,admin=true:ecert,abac.init=true:ecert' 2>/dev/null || echo '(may already be registered)'
+    echo '--- Enrolling ${admin_name} ---'
+    fabric-ca-client enroll --url https://${admin_name}:${admin_pass}@localhost:443 --mspdir ${org_base}/peerOrganizations/${org}.example.com/users/${admin_name}/msp
+    mv ${org_base}/peerOrganizations/${org}.example.com/users/${admin_name}/msp/keystore/*_sk ${org_base}/peerOrganizations/${org}.example.com/users/${admin_name}/msp/keystore/key.pem 2>/dev/null || true
+    mv ${org_base}/peerOrganizations/${org}.example.com/users/${admin_name}/msp/cacerts/*.pem ${org_base}/peerOrganizations/${org}.example.com/users/${admin_name}/msp/cacerts/${ca_name}.pem 2>/dev/null || true
+    cat > ${org_base}/peerOrganizations/${org}.example.com/users/${admin_name}/msp/config.yaml <<'NODEOU'
+    NodeOUs:
+      Enable: true
+      ClientOUIdentifier:
+        Certificate: cacerts/${ca_name}.pem
+        OrganizationalUnitIdentifier: client
+      PeerOUIdentifier:
+        Certificate: cacerts/${ca_name}.pem
+        OrganizationalUnitIdentifier: peer
+      AdminOUIdentifier:
+        Certificate: cacerts/${ca_name}.pem
+        OrganizationalUnitIdentifier: admin
+      OrdererOUIdentifier:
+        Certificate: cacerts/${ca_name}.pem
+        OrganizationalUnitIdentifier: orderer
+    NODEOU"
+      fi
+
+      echo "$script" | kubectl -n "${NAMESPACE}" exec "deploy/${ca_name}" -i -- /bin/sh
+      echo "=== ${org} identities created ==="
+    }
+
+    enroll_org org0
+    enroll_org org1
+    enroll_org org2
+
+    echo "=== Waiting for orderers and peers to be ready ==="
+    for deploy in org0-orderer1 org0-orderer2 org0-orderer3 org1-peer1 org1-peer2 org2-peer1 org2-peer2; do
+      echo "  Waiting for ${deploy}..."
+      kubectl -n "${NAMESPACE}" rollout status "deploy/${deploy}" --timeout=300s
+    done
+    echo "=== All orderers and peers ready ==="
+
+    echo "=== Bootstrap enrollment complete ==="
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: drm-bootstrap-enroll
+  namespace: {{ $ns }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      serviceAccountName: drm-hook-sa
+      restartPolicy: Never
+      {{- include "drm.imagePullSecrets" $ | nindent 6 }}
+      containers:
+        - name: enroll
+          image: {{ include "drm.imageURL" (dict "ctx" $ "image" $.Values.images.kubectl) }}
+          command: ["/bin/sh", "/scripts/enroll.sh"]
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+      volumes:
+        - name: scripts
+          configMap:
+            name: bootstrap-enroll-script
+            defaultMode: 0755

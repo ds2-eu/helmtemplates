@@ -1,0 +1,77 @@
+{{- $ns := include "drm.namespace" . -}}
+{{- $domain := include "drm.domain" . -}}
+# ============================================================================
+# DRM Connector Monitoring
+# Monitors the connector against the Fabric REST API
+# ============================================================================
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: drm-connector-monitoring
+  namespace: {{ $ns }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: drm-connector-monitoring
+  template:
+    metadata:
+      labels:
+        app: drm-connector-monitoring
+    spec:
+      {{- include "drm.imagePullSecrets" $ | nindent 6 }}
+      containers:
+        - name: main
+          image: {{ include "drm.imageURL" (dict "ctx" $ "image" $.Values.images.drmConnectorMonitoring) }}
+          imagePullPolicy: {{ .Values.images.drmConnectorMonitoring.pullPolicy }}
+          env:
+            - name: BLOCKCHAIN_MANAGER
+              value: {{ .Values.drmConnectorMonitoring.blockchainManager | quote }}
+            - name: SAMPLE_APIKEY
+              value: {{ .Values.restApi.org1ApiKey | quote }}
+          ports:
+            - containerPort: {{ .Values.drmConnectorMonitoring.port }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: drm-connector-monitoring
+  namespace: {{ $ns }}
+spec:
+  ports:
+    - name: http
+      port: {{ .Values.drmConnectorMonitoring.port }}
+      protocol: TCP
+  selector:
+    app: drm-connector-monitoring
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: 60s
+    nginx.ingress.kubernetes.io/proxy-body-size: 256m
+  labels:
+    app: drm-connector-monitoring
+  name: drm-connector-monitoring
+  namespace: {{ $ns }}
+spec:
+  {{- include "drm.ingressClass" . | nindent 2 }}
+  rules:
+    - host: {{ .Values.drmConnectorMonitoring.name }}.{{ $domain }}
+      http:
+        paths:
+          - backend:
+              service:
+                name: drm-connector-monitoring
+                port:
+                  name: http
+            path: /
+            pathType: ImplementationSpecific
+  # No secretName - nginx serves its default certificate for this host
+  tls:
+    - hosts:
+        - {{ .Values.drmConnectorMonitoring.name }}.{{ $domain }}
