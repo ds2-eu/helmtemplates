@@ -1,0 +1,95 @@
+{{- range $name, $c := .Values.components }}
+{{- if $c.enabled }}
+{{- $persist := $c.persistence | default dict }}
+{{- $mounts := $c.fileMounts | default list }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app: {{ $name }}
+spec:
+  replicas: {{ default 1 $c.replicas }}
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+    spec:
+      {{- if $.Values.serviceAccount.create }}
+      serviceAccountName: {{ $name }}-serviceaccount
+      {{- end }}
+      {{- if $.Values.ndots.enabled }}
+      dnsPolicy: ClusterFirst
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "1"
+      {{- end }}
+      {{- with $c.waitFor }}
+      initContainers:
+      - name: wait-for-dependencies
+        image: {{ $.Values.waitImage }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - |
+          {{- range . }}
+          echo "Waiting for {{ .host }}:{{ .port }}"
+          until nc -z -w 2 {{ .host }} {{ .port }}; do sleep 3; done
+          {{- end }}
+          echo "Dependencies are up"
+      {{- end }}
+      containers:
+      - name: {{ $name }}
+        image: {{ include "gcat.imageURL" (dict "root" $ "name" $name "c" $c) }}
+        imagePullPolicy: {{ $.Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ $c.port }}
+        {{- if $.Values.resourcesEnabled }}
+        resources:
+          {{- toYaml $.Values.resources | nindent 10 }}
+        {{- end }}
+        {{- if $c.config }}
+        envFrom:
+        - configMapRef:
+            name: {{ $name }}-configmap
+        {{- end }}
+        {{- if or $persist.enabled $mounts }}
+        volumeMounts:
+        {{- if $persist.enabled }}
+        - name: {{ $name }}-volumedata
+          mountPath: {{ $persist.mountpath | quote }}
+        {{- end }}
+        {{- range $mounts }}
+        - name: {{ $name }}-files
+          mountPath: {{ .mountPath | quote }}
+          subPath: {{ .key | quote }}
+          readOnly: true
+        {{- end }}
+        {{- end }}
+      {{- if or $persist.enabled $mounts }}
+      volumes:
+      {{- if $persist.enabled }}
+      - name: {{ $name }}-volumedata
+        persistentVolumeClaim:
+          claimName: {{ $name }}-pvc
+      {{- end }}
+      {{- if $mounts }}
+      - name: {{ $name }}-files
+        configMap:
+          name: {{ $name }}-files
+      {{- end }}
+      {{- end }}
+      {{- if $.Values.image.privateRegistry.enabled }}
+      imagePullSecrets:
+      - name: {{ include "gcat.pullSecretName" $ }}
+      {{- end }}
+{{- end }}
+{{- end }}

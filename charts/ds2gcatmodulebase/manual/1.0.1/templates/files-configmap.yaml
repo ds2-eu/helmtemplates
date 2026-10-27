@@ -1,0 +1,12 @@
+{{- range $name, $c := .Values.components }}
+{{- if and $c.enabled $c.files }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-files
+  namespace: {{ $.Release.Namespace }}
+data:
+  {{- toYaml $c.files | nindent 2 }}
+{{- end }}
+{{- end }}

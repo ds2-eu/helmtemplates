@@ -1,0 +1,22 @@
+{{- range $name, $c := .Values.components }}
+{{- $persist := $c.persistence | default dict }}
+{{- if and $c.enabled $persist.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ $name }}-pv
+  labels:
+    type: local
+spec:
+  storageClassName: {{ $.Release.Namespace }}-{{ $name }}-storageclass
+  capacity:
+    storage: {{ $persist.storage }}
+  accessModes:
+    - {{ $persist.accessmode | default "ReadWriteOnce" }}
+  persistentVolumeReclaimPolicy: {{ $persist.reclaimpolicy | default "Delete" }}
+  hostPath:
+    path: {{ $persist.path | quote }}
+    type: DirectoryOrCreate
+{{- end }}
+{{- end }}

@@ -1,0 +1,21 @@
+{{- range $name, $c := .Values.components }}
+{{- if $c.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app: {{ $name }}
+    service: {{ $name }}
+spec:
+  ports:
+  - port: {{ $c.servicePort }}
+    name: http
+    targetPort: {{ $c.port }}
+  type: ClusterIP
+  selector:
+    app: {{ $name }}
+{{- end }}
+{{- end }}

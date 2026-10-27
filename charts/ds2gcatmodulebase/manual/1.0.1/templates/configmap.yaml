@@ -1,0 +1,12 @@
+{{- range $name, $c := .Values.components }}
+{{- if and $c.enabled $c.config }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-configmap
+  namespace: {{ $.Release.Namespace }}
+data:
+  {{- toYaml $c.config | nindent 2 }}
+{{- end }}
+{{- end }}

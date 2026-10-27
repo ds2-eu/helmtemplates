@@ -1,0 +1,16 @@
+apiVersion: v2
+name: ds2gcatmodulebase
+description: DS2 GCAT module base chart - deploys all GCAT components in one release
+type: application
+version: 1.0.1
+appVersion: "1.0.0"
+annotations:
+  gcat.ds2.eu/derived-from: ds2modulebase4
+  gcat.ds2.eu/derived-from-repository: https://github.com/ds2-eu/helmtemplates
+
+# Multi-component base chart: one release deploys every GCAT component
+# (nats, fuseki, api gateway, identity, catalog, edc connector adapter, frontend).
+# Each component gets a deployment, a service and a service account; optional
+# config map, mounted files, persistent volume and ingress, as in ds2modulebase4.
+# Images are resolved as <registryUrl>/ds2-eu/mkt-<module.name>/<image>:<tag>,
+# with registryUrl read from the idtconfigmap in the icekube namespace.

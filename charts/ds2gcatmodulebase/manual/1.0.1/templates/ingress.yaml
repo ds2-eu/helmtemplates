@@ -1,0 +1,35 @@
+{{- range $name, $c := .Values.components }}
+{{- $ing := $c.ingress | default dict }}
+{{- if and $c.enabled $ing.enabled }}
+{{- $host := $ing.host | default (printf "%s.%s" $name (include "domain" $)) }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}-ingress
+  namespace: {{ $.Release.Namespace }}
+  {{- with $ing.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ $ing.className | default "nginx" }}
+  tls:
+  - hosts:
+    - {{ $host | quote }}
+    {{- with $ing.tlsSecretName }}
+    secretName: {{ . | quote }}
+    {{- end }}
+  rules:
+  - host: {{ $host | quote }}
+    http:
+      paths:
+      - path: {{ $ing.path | default "/" }}
+        pathType: {{ $ing.pathType | default "Prefix" }}
+        backend:
+          service:
+            name: {{ $name }}
+            port:
+              number: {{ $c.servicePort }}
+{{- end }}
+{{- end }}
