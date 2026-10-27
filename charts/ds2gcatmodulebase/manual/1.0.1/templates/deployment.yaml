@@ -47,7 +47,7 @@ spec:
       {{- end }}
       containers:
       - name: {{ $name }}
-        image: {{ include "gcat.imageURL" (dict "root" $ "name" $name "c" $c) }}
+        image: {{ include "gcat.manualimageURL" (dict "root" $ "name" $name "c" $c) }}
         imagePullPolicy: {{ $.Values.image.pullPolicy }}
         ports:
         - name: http
